@@ -263,3 +263,40 @@
     setTimeout(function () { if (!handlers) emit('register', { canSave: false }); }, 1500);
   });
 })();
+
+/*
+ * Tap diagnostics: add ?debug to the arcade (or game) URL to show a panel
+ * listing the device, which input events actually arrive, and any errors.
+ * Invisible and inert otherwise.
+ */
+(function () {
+  var on = false;
+  try { on = /[?&]debug\b/.test(location.search) || (window.parent !== window && /[?&]debug\b/.test(window.parent.location.search)); } catch (e) { /* ignore */ }
+  if (!on) return;
+  var lines = [], box = null, counts = {};
+  function render() {
+    if (!box) return;
+    var c = Object.keys(counts).map(function (k) { return k + ':' + counts[k]; }).join('  ');
+    box.textContent = 'UA: ' + navigator.userAgent +
+      '\nPointerEvent:' + !!window.PointerEvent + '  ontouchstart:' + ('ontouchstart' in window) +
+      '  maxTouch:' + (navigator.maxTouchPoints || 0) + '  inFrame:' + (window.parent !== window) +
+      '\nCOUNTS ' + c + '\n' + lines.join('\n');
+  }
+  function log(s) { lines.unshift(new Date().toISOString().slice(17, 23) + ' ' + s); lines.length = Math.min(lines.length, 14); render(); }
+  ['touchstart', 'touchend', 'touchcancel', 'pointerdown', 'pointerup', 'pointercancel', 'mousedown', 'click'].forEach(function (t) {
+    window.addEventListener(t, function (e) {
+      counts[t] = (counts[t] || 0) + 1;
+      var tg = e.target, name = tg && tg.tagName ? tg.tagName.toLowerCase() + (tg.id ? '#' + tg.id : '') : String(tg);
+      log(t + (e.pointerType ? '(' + e.pointerType + ')' : '') + ' on ' + name + ' cancelable:' + e.cancelable);
+    }, { capture: true, passive: true });
+  });
+  window.addEventListener('error', function (e) { log('ERROR ' + e.message + ' @' + (e.lineno || '?')); });
+  window.addEventListener('unhandledrejection', function (e) { log('REJECT ' + (e.reason && e.reason.message || e.reason)); });
+  document.addEventListener('DOMContentLoaded', function () {
+    box = document.createElement('pre');
+    box.style.cssText = 'position:fixed;left:4px;right:4px;bottom:4px;max-height:45%;overflow:hidden;margin:0;padding:6px;' +
+      'background:rgba(0,0,0,.78);color:#7CFC00;font:11px/1.3 monospace;white-space:pre-wrap;word-break:break-all;z-index:2147483647;pointer-events:none;border-radius:6px';
+    document.body.appendChild(box);
+    render();
+  });
+})();

@@ -259,6 +259,18 @@ async function mazePass(browser, vp) {
   m = await mz();
   check(m.state === 'play' && m.hearts === 3 && m.level === 1, 'maze: Try again restarts the level with full hearts');
 
+  // Rainbow Power: grab one, then a ghost that touches the unicorn gets booped (no heart lost)
+  check((await mz()).powers >= 2, 'maze: level has rainbow powers to grab');
+  await page.waitForTimeout(3000);
+  await g().evaluate(() => window.__maze._power());
+  await page.waitForTimeout(150);
+  check((await mz()).power > 0, 'maze: grabbing a rainbow power turns it on');
+  await t.shot('17b-maze-power');
+  await g().evaluate(() => window.__maze._ghostOnUnicorn());
+  await page.waitForTimeout(300);
+  m = await mz();
+  check(m.boops === 1 && m.hearts === 3, `maze: powered-up unicorn boops a ghost instead of losing a heart (boops ${m.boops}, hearts ${m.hearts})`);
+
   // Escape -> present -> pick a unicorn -> level 2 in that colour
   await g().evaluate(() => window.__maze._toExit());
   await t.frame().locator('#surprise:not(.hidden)').waitFor({ timeout: 5000 });
