@@ -215,6 +215,72 @@ async function unicornPass(browser, vp) {
   await t.ctx.close();
 }
 
+async function mazePass(browser, vp) {
+  const t = await openContext(browser, vp);
+  const { page } = t;
+  await t.home();
+  await t.launch(3);
+  await page.waitForTimeout(500);
+  await t.shot('15-maze-title');
+  const g = () => t.gameFrame();
+  const mz = () => g().evaluate(() => ({ ...window.__maze, uni: window.__maze.uni }));
+  const tap = (x, y) => (vp.mobile ? page.touchscreen.tap(x, y) : page.mouse.click(x, y));
+  const tapEl = async (loc) => { const b = await loc.boundingBox(); await tap(b.x + b.width / 2, b.y + b.height / 2); };
+
+  await tapEl(t.frame().locator('#play'));
+  await page.waitForTimeout(300);
+  let m = await mz();
+  check(m.state === 'play' && m.level === 1 && m.hearts === 3, `maze: Play starts level 1 with 3 hearts (${m.state})`);
+  const start = m.uni;
+  // Tap above, then left of the unicorn: the start corner always opens one of those ways
+  await tap(vp.width * 0.97, vp.height * 0.08);
+  await page.waitForTimeout(700);
+  await tap(vp.width * 0.03, vp.height * 0.97);
+  await page.waitForTimeout(700);
+  m = await mz();
+  check(m.uni.x !== start.x || m.uni.y !== start.y, `maze: tapping moves the unicorn (${start.x},${start.y} -> ${m.uni.x.toFixed(1)},${m.uni.y.toFixed(1)})`);
+  await page.waitForTimeout(6000);   // let a couple of ghosts out for the screenshot
+  await t.shot('16-maze-playing');
+  const fits = await g().evaluate(() => {
+    const c = document.getElementById('c').getBoundingClientRect();
+    return c.width === innerWidth && c.height === innerHeight;
+  });
+  check(fits, 'maze: canvas fills the screen');
+
+  // Ghost bumps cost a heart; three bumps -> try again
+  await g().evaluate(() => window.__maze._hit());
+  check((await mz()).hearts === 2, 'maze: a ghost bump costs one heart');
+  await g().evaluate(() => { window.__maze._hit(); window.__maze._hit(); });
+  await t.frame().locator('#lost:not(.hidden)').waitFor({ timeout: 3000 });
+  await page.waitForTimeout(500);
+  await t.shot('17-maze-lost');
+  await tapEl(t.frame().locator('#retry'));
+  await page.waitForTimeout(300);
+  m = await mz();
+  check(m.state === 'play' && m.hearts === 3 && m.level === 1, 'maze: Try again restarts the level with full hearts');
+
+  // Escape -> present -> pick a unicorn -> level 2 in that colour
+  await g().evaluate(() => window.__maze._toExit());
+  await t.frame().locator('#surprise:not(.hidden)').waitFor({ timeout: 5000 });
+  await page.waitForTimeout(600);
+  await t.shot('18-maze-gift');
+  await tapEl(t.frame().locator('#gift'));
+  await page.waitForTimeout(500);
+  await t.shot('19-maze-picker');
+  const pick = await g().evaluate(() => {
+    const r = document.getElementById('picker').getBoundingClientRect();
+    return { ok: r.top >= -1 && r.bottom <= innerHeight + 1, h: Math.round(r.height), vh: innerHeight, n: document.querySelectorAll('.swatch').length };
+  });
+  check(pick.ok && pick.n === 11, `maze: unicorn picker shows 11 colours and fits (${pick.h}px in ${pick.vh}px)`);
+  await tapEl(t.frame().locator('.swatch[data-skin="black"]'));
+  await page.waitForTimeout(2600);
+  m = await mz();
+  check(m.state === 'play' && m.level === 2 && m.skin === 'black', `maze: picking a colour starts level 2 as that unicorn (${m.level}, ${m.skin})`);
+  await t.shot('20-maze-level2');
+  check(t.errors.length === 0, `no page errors${t.errors.length ? ': ' + t.errors.join(' | ') : ''}`);
+  await t.ctx.close();
+}
+
 async function savesPass(browser, vp) {
   const t = await openContext(browser, vp, { forceSaves: true });
   const { page } = t;
@@ -276,6 +342,8 @@ try {
     await freshPass(browser, vp);
     console.log('  ↳ Flight of the Unicorn');
     await unicornPass(browser, vp);
+    console.log("  ↳ Cece's Unicorn Maze");
+    await mazePass(browser, vp);
     if (vp.savesPass) {
       console.log('  ↳ with saves turned on');
       await savesPass(browser, vp);

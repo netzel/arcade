@@ -43,5 +43,20 @@
     "controls": "Tap anywhere to flap",
     "background": "#5ab8ff",
     "saves": false
+  },
+  {
+    "id": "cece-unicorn-maze",
+    "file": "cece-unicorn-maze.html",
+    "title": "Cece's Unicorn Maze",
+    "tagline": "Sneak past Jack, Lena, Marcus & Pika-Paka-Poa to find the castle! Designed by Cece.",
+    "emoji": "👻",
+    "colors": [
+      "#a77bff",
+      "#ff7eb6"
+    ],
+    "orientation": "any",
+    "controls": "Swipe or tap to move",
+    "background": "#24164d",
+    "saves": false
   }
 ]
