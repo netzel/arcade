@@ -227,6 +227,20 @@ async function mazePass(browser, vp) {
   const tap = (x, y) => (vp.mobile ? page.touchscreen.tap(x, y) : page.mouse.click(x, y));
   const tapEl = async (loc) => { const b = await loc.boundingBox(); await tap(b.x + b.width / 2, b.y + b.height / 2); };
 
+  // Pick a food on the title screen
+  await tapEl(t.frame().locator('#foodBtn'));
+  await page.waitForTimeout(400);
+  await tapEl(t.frame().locator('.food[data-food="sushi"]'));
+  await t.shot('15b-maze-food');
+  const fp = await g().evaluate(() => {
+    const r = document.getElementById('foodCard').getBoundingClientRect();
+    return { ok: r.top >= -1 && r.bottom <= innerHeight + 1, h: Math.round(r.height), vh: innerHeight };
+  });
+  check(fp.ok, `maze: food picker fits on screen (${fp.h}px in ${fp.vh}px)`);
+  await tapEl(t.frame().locator('#foodDone'));
+  await page.waitForTimeout(400);
+  check((await mz()).food === 'sushi' && (await mz()).state === 'title', 'maze: picking sushi works and stays on the title screen');
+
   await tapEl(t.frame().locator('#play'));
   await page.waitForTimeout(300);
   let m = await mz();
@@ -256,6 +270,8 @@ async function mazePass(browser, vp) {
   await page.waitForTimeout(700);
   m = await mz();
   check(m.uni.x !== start.x || m.uni.y !== start.y, `maze: tapping moves the unicorn (${start.x},${start.y} -> ${m.uni.x.toFixed(1)},${m.uni.y.toFixed(1)})`);
+  // The taps above can walk the unicorn right out of an easy maze; start the level fresh
+  await g().evaluate(() => window.__maze._restart());
   await page.waitForTimeout(6000);   // let a couple of ghosts out for the screenshot
   await t.shot('16-maze-playing');
   const fits = await g().evaluate(() => {
@@ -264,10 +280,26 @@ async function mazePass(browser, vp) {
   });
   check(fits, 'maze: canvas fills the screen');
 
+  // If the wandering unicorn bumped into a present, open it and carry on
+  const settle = async () => {
+    for (let i = 0; i < 3; i++) {
+      const st = (await mz()).state;
+      if (st === 'present') {
+        await tapEl(t.frame().locator('#presentBox')); await page.waitForTimeout(400);
+        await tapEl(t.frame().locator('#prizeOk')); await page.waitForTimeout(400);
+      } else if (st === 'place') {
+        const c = await g().evaluate(() => window.__maze._cellScreen(0, 0));
+        await tap(c.x, c.y); await page.waitForTimeout(300);
+      } else return;
+    }
+  };
+  await settle();
+
   // Ghost bumps cost a heart; three bumps -> try again
+  const h0 = (await mz()).hearts;   // a present may have added one
   await g().evaluate(() => window.__maze._hit());
-  check((await mz()).hearts === 2, 'maze: a ghost bump costs one heart');
-  await g().evaluate(() => { window.__maze._hit(); window.__maze._hit(); });
+  check((await mz()).hearts === h0 - 1, `maze: a ghost bump costs one heart (${h0} -> ${(await mz()).hearts}, state ${(await mz()).state})`);
+  await g().evaluate(() => { for (let i = 0; i < 6 && window.__maze.hearts > 0; i++) window.__maze._hit(); });
   await t.frame().locator('#lost:not(.hidden)').waitFor({ timeout: 3000 });
   await page.waitForTimeout(500);
   await t.shot('17-maze-lost');
@@ -287,6 +319,34 @@ async function mazePass(browser, vp) {
   await page.waitForTimeout(300);
   m = await mz();
   check(m.boops === 1 && m.hearts === 3, `maze: powered-up unicorn boops a ghost instead of losing a heart (boops ${m.boops}, hearts ${m.hearts})`);
+
+  // Presents in the maze: a treasure you place, and a helper
+  check((await mz()).presents >= 2, 'maze: level has presents to find');
+  await g().evaluate(() => window.__maze._present('deco'));
+  await t.frame().locator('#presentPop:not(.hidden)').waitFor({ timeout: 3000 });
+  await page.waitForTimeout(400);
+  await tapEl(t.frame().locator('#presentBox'));
+  await page.waitForTimeout(500);
+  await t.shot('17c-maze-present');
+  await tapEl(t.frame().locator('#prizeOk'));
+  await page.waitForTimeout(400);
+  check((await mz()).state === 'place', 'maze: a treasure asks where to put it');
+  const spot = await g().evaluate(() => window.__maze._cellScreen(0, 1));
+  await tap(spot.x, spot.y);
+  await page.waitForTimeout(300);
+  m = await mz();
+  check(m.state === 'play' && m.decorations === 1, `maze: tapping the maze puts the treasure there (${m.state}, ${m.decorations})`);
+  await t.shot('17d-maze-placed');
+  const heartsBefore = m.hearts;
+  await g().evaluate(() => window.__maze._present('heart'));
+  await t.frame().locator('#presentPop:not(.hidden)').waitFor({ timeout: 3000 });
+  await page.waitForTimeout(400);
+  await tapEl(t.frame().locator('#presentBox'));
+  await page.waitForTimeout(400);
+  await tapEl(t.frame().locator('#prizeOk'));
+  await page.waitForTimeout(300);
+  m = await mz();
+  check(m.state === 'play' && m.hearts === heartsBefore + 1, `maze: a heart present adds a heart (${heartsBefore} -> ${m.hearts})`);
 
   // Escape -> present -> pick a unicorn -> level 2 in that colour
   await g().evaluate(() => window.__maze._toExit());

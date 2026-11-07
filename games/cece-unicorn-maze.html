@@ -76,7 +76,7 @@
   .big-emoji { font-size: clamp(56px, 14vmin, 90px); line-height: 1; }
 
   /* Surprise */
-  #gift {
+  #gift, .gift-btn {
     font-size: clamp(90px, 24vmin, 150px); line-height: 1; background: none; border: 0; cursor: pointer; padding: 0;
     animation: wiggle 1s ease-in-out infinite; filter: drop-shadow(0 8px 16px rgba(0,0,0,.3)); touch-action: manipulation;
   }
@@ -93,7 +93,28 @@
   .swatch.on { border-color: #ffb800; box-shadow: 0 0 0 3px #ffe14d; }
   .swatch canvas { position: static; width: 56px; height: 44px; }
 
+  .food-btn {
+    font-size: clamp(18px, 4.4vmin, 24px); padding: 10px 22px; background: #fff; color: #7c3aed;
+    box-shadow: 0 5px 0 #b79cf2, 0 8px 18px rgba(0,0,0,.25); display: flex; align-items: center; gap: 10px;
+  }
+  .food-btn .food-now { font-size: 1.6em; line-height: 1; }
+  #foodCard { width: min(640px, 100%); }
+  .food-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .food {
+    width: clamp(48px, 11vmin, 64px); height: clamp(48px, 11vmin, 64px); font-size: clamp(28px, 7vmin, 40px);
+    background: #fff; border: 3px solid #eadcff; border-radius: 16px; cursor: pointer; padding: 0; line-height: 1;
+    touch-action: manipulation; transition: transform .12s;
+  }
+  .food:active { transform: scale(.9); }
+  .food.on { border-color: #ffb800; box-shadow: 0 0 0 3px #ffe14d; }
+  .food-name { font-weight: 700; color: #e8459a; font-size: 20px; min-height: 1.2em; }
+  .prize-emoji { font-size: clamp(80px, 22vmin, 130px); line-height: 1.1; animation: pop .6s cubic-bezier(.2, 1.8, .4, 1) both; }
+  @keyframes pop { from { transform: scale(.2) rotate(-30deg); opacity: 0; } }
+
   @media (max-height: 500px) {
+    .food { width: 44px; height: 44px; font-size: 26px; }
+    .prize-emoji { font-size: 64px; }
+    .food-btn { padding: 6px 16px; }
     .card { padding: 12px 16px; gap: 6px; }
     .card h2 { font-size: 22px; }
     #picker p { display: none; }
@@ -113,14 +134,39 @@
 <canvas id="c"></canvas>
 
 <div id="hud" class="hidden">
-  <div class="hud-pill"><span class="hearts" id="hudHearts"></span><span id="hudLevel">Level 1</span><span id="hudStars">⭐ 0/0</span></div>
+  <div class="hud-pill"><span class="hearts" id="hudHearts"></span><span id="hudLevel">Level 1</span><span id="hudStars">🍎 0/0</span></div>
 </div>
 
 <div id="title" class="overlay">
   <div class="logo"><small>Cece's</small><b>Unicorn Maze</b></div>
   <div class="title-bottom">
     <div class="howto">Swipe or tap to move. Find the castle! 🏰<br>Grab a 🌈 rainbow power to boop the ghosts!</div>
+    <button class="btn food-btn" id="foodBtn" type="button"><span class="food-now" id="foodNow">🍎</span><span>Pick my food</span></button>
     <button class="btn btn-go" id="play" type="button">▶ Play</button>
+  </div>
+</div>
+
+<div id="foodPicker" class="overlay hidden">
+  <div class="card" id="foodCard">
+    <h2>Pick your food! 😋</h2>
+    <div class="food-name" id="foodName"></div>
+    <div class="food-grid" id="foodGrid"></div>
+    <button class="btn btn-go" id="foodDone" type="button">✓ Yum!</button>
+  </div>
+</div>
+
+<div id="presentPop" class="overlay hidden">
+  <div class="card">
+    <h2 id="presentTitle">You found a present!</h2>
+    <div id="presentClosed">
+      <button class="gift-btn" id="presentBox" type="button" aria-label="Open the present">🎁</button>
+      <div class="gift-hint">Tap the present!</div>
+    </div>
+    <div id="presentOpen" hidden>
+      <div class="prize-emoji" id="prizeEmoji"></div>
+      <p id="prizeText"></p>
+      <button class="btn btn-go" id="prizeOk" type="button">Yay!</button>
+    </div>
   </div>
 </div>
 
@@ -182,10 +228,41 @@
     { name: 'Pika-Paka-Poa', color: '#c59bff', mood: 'silly', speed: 1.15, says: ['Pika-paka-poa!', 'Wheee!'] },
   ];
 
-  let store = { skin: 'rainbow', best: 0 };
+  // ================= Cece's foods (the yummy things to collect) =================
+  const FOODS = [
+    ['apple', '🍎', 'Apple'], ['orange', '🍊', 'Orange'], ['banana', '🍌', 'Banana'], ['strawberry', '🍓', 'Strawberry'],
+    ['watermelon', '🍉', 'Watermelon'], ['grapes', '🍇', 'Grapes'], ['cherries', '🍒', 'Cherries'], ['peach', '🍑', 'Peach'],
+    ['pineapple', '🍍', 'Pineapple'], ['kiwi', '🥝', 'Kiwi'], ['pear', '🍐', 'Pear'], ['lemon', '🍋', 'Lemon'],
+    ['carrot', '🥕', 'Carrot'], ['corn', '🌽', 'Corn'], ['broccoli', '🥦', 'Broccoli'], ['cucumber', '🥒', 'Cucumber'],
+    ['avocado', '🥑', 'Avocado'], ['potato', '🥔', 'Potato'], ['sushi', '🍣', 'Sushi'], ['riceball', '🍙', 'Rice ball'],
+    ['dumpling', '🥟', 'Dumpling'], ['noodles', '🍜', 'Noodles'], ['pizza', '🍕', 'Pizza'], ['burger', '🍔', 'Burger'],
+    ['taco', '🌮', 'Taco'], ['fries', '🍟', 'Fries'], ['hotdog', '🌭', 'Hot dog'], ['pretzel', '🥨', 'Pretzel'],
+    ['cheese', '🧀', 'Cheese'], ['pancakes', '🥞', 'Pancakes'], ['egg', '🍳', 'Egg'], ['bread', '🍞', 'Bread'],
+    ['croissant', '🥐', 'Croissant'], ['donut', '🍩', 'Donut'], ['cupcake', '🧁', 'Cupcake'], ['cookie', '🍪', 'Cookie'],
+    ['icecream', '🍦', 'Ice cream'], ['cake', '🍰', 'Cake'], ['lollipop', '🍭', 'Lollipop'], ['popcorn', '🍿', 'Popcorn'],
+  ].map(([id, emoji, name]) => ({ id, emoji, name }));
+  const foodById = (id) => FOODS.find((f) => f.id === id) || FOODS[0];
+
+  // ================= Presents in the maze =================
+  // Helpers do something right away; treasures get placed in the maze wherever you tap.
+  const HELPERS = [
+    { id: 'heart', emoji: '❤️', text: 'An extra heart!' },
+    { id: 'power', emoji: '🌈', text: 'Rainbow Power! Go boop the ghosts!' },
+    { id: 'freeze', emoji: '❄️', text: 'Ghost freeze! The ghosts are stuck!' },
+    { id: 'speed', emoji: '⚡', text: 'Super speed!' },
+  ];
+  const TREASURES = [
+    ['🦋', 'butterfly'], ['🌸', 'flower'], ['🌻', 'sunflower'], ['🌳', 'tree'], ['🌴', 'palm tree'], ['🍄', 'mushroom'],
+    ['🎈', 'balloon'], ['🐱', 'kitty'], ['🐶', 'puppy'], ['🐰', 'bunny'], ['🐼', 'panda'], ['🐸', 'froggy'],
+    ['🐢', 'turtle'], ['🐞', 'ladybug'], ['🐝', 'bee'], ['🧸', 'teddy bear'], ['🎀', 'bow'], ['💎', 'gem'],
+    ['🌙', 'moon'], ['⛲', 'fountain'], ['🏡', 'little house'], ['🎠', 'carousel'], ['🦄', 'unicorn friend'], ['🌺', 'hibiscus'],
+  ].map(([emoji, name]) => ({ id: 'deco', emoji, name }));
+
+  let store = { skin: 'rainbow', best: 0, food: 'apple' };
   try { store = Object.assign(store, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch (e) { /* private mode */ }
   const persist = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) { /* ignore */ } };
   let skin = skinById(store.skin);
+  let food = foodById(store.food);
 
   // ================= Canvas =================
   const canvas = $('c');
@@ -222,6 +299,8 @@
     pick: () => [659, 880, 1318].forEach((f, i) => tone(f, { at: i * 0.07, dur: 0.15, type: 'triangle', vol: 0.11 })),
     giggle: () => [900, 1100, 950, 1200].forEach((f, i) => tone(f, { at: i * 0.07, dur: 0.07, vol: 0.04 })),
     tick: () => tone(880, { dur: 0.05, vol: 0.05 }),
+    nom: () => { tone(330, { dur: 0.07, type: 'triangle', vol: 0.12 }); tone(392, { at: 0.11, dur: 0.07, type: 'triangle', vol: 0.12 }); tone(1568, { at: 0.2, dur: 0.1, vol: 0.05 }); },
+    place: () => [988, 1318].forEach((f, i) => tone(f, { at: i * 0.08, dur: 0.14, type: 'triangle', vol: 0.1 })),
     power: () => [523, 659, 784, 1046, 1318, 1568].forEach((f, i) => tone(f, { at: i * 0.05, dur: 0.18, type: 'triangle', vol: 0.1 })),
     boop: () => { tone(660, { dur: 0.12, slide: 500, vol: 0.12 }); tone(1320, { at: 0.08, dur: 0.15, type: 'triangle', vol: 0.09 }); },
   };
@@ -321,8 +400,12 @@
     const powers = corners.slice(0, level <= 2 ? 2 : 3).map((c) => ({ x: c.x, y: c.y, got: false, t: Math.random() * 6 }));
     const powerAt = (x, y) => powers.some((q) => q.x === x && q.y === y);
     const keptStars = stars.filter((st) => !powerAt(st.x, st.y));
+    // Presents: on spots that aren't food, power, or right next to the start
+    const free = cells.slice(starCount).filter((c) => !powerAt(c.x, c.y) && Math.abs(c.x - start.x) + Math.abs(c.y - start.y) > 2)
+      .sort(() => Math.random() - 0.5);
+    const presents = free.slice(0, Math.min(2 + Math.floor(level / 3), 4)).map((c) => ({ x: c.x, y: c.y, got: false, t: Math.random() * 6 }));
 
-    return { cols, rows, walls, room: { x: rx, y: ry, w: rw, h: rh }, exitX, start, stars: keptStars, powers, inRoom };
+    return { cols, rows, walls, room: { x: rx, y: ry, w: rw, h: rh }, exitX, start, stars: keptStars, powers, presents, inRoom };
   }
 
   function open(x, y, d, forGhost) {
@@ -443,6 +526,9 @@
   let level = 1, hearts = 3, invuln = 0, clock = 0, levelClock = 0, wonAt = 0;
   let uni = null, ghosts = [], particles = [], bubbles = [], banner = null, movedOnce = false;
   let power = 0, boops = 0;           // Rainbow Power seconds left, ghosts booped this level
+  let frozen = 0, speedy = 0;         // present helpers: seconds left
+  let safe = 0;                       // quiet grace period after a present (no blinking)
+  let decorations = [], placing = null, nextPrize = null;
   const powerTime = () => Math.max(5, 8 - level * 0.4);
 
   function actor(x, y) { return { x, y, tx: x, ty: y, fx: x, fy: y, dir: null, want: null, moving: false, face: -1 }; }
@@ -463,7 +549,7 @@
         releaseAt: (level === 1 ? 2.5 : 1.2) + i * (level === 1 ? 4 : 2.5), bob: Math.random() * 6,
       });
     });
-    particles = []; bubbles = []; power = 0; boops = 0;
+    particles = []; bubbles = []; power = 0; boops = 0; frozen = 0; speedy = 0; decorations = []; placing = null;
     banner = { text: `Level ${level}`, sub: 'Find the castle! 🏰', t: 0 };
     state = 'play';
     updateHud();
@@ -474,7 +560,7 @@
     $('hudHearts').textContent = '❤️'.repeat(hearts) + '🤍'.repeat(Math.max(0, 3 - hearts));
     $('hudLevel').textContent = `Level ${level}`;
     const got = maze ? maze.stars.filter((s) => s.got).length : 0;
-    $('hudStars').textContent = `⭐ ${got}/${maze ? maze.stars.length : 0}`;
+    $('hudStars').textContent = `${food.emoji} ${got}/${maze ? maze.stars.length : 0}`;
   }
 
   function stepActor(a, speed, dt, decide, arrive) {
@@ -530,22 +616,17 @@
   const uniArrive = (a) => {
     for (const s of maze.stars) {
       if (!s.got && s.x === a.x && s.y === a.y) {
-        s.got = true; sfx.star(); sparkle(px(s.x), py(s.y), 12); updateHud();
+        s.got = true; sfx.nom(); sparkle(px(s.x), py(s.y), 10); updateHud();
+        particles.push({ x: px(s.x), y: py(s.y) - cell * 0.4, vx: 0, vy: -50, life: 0.9, max: 0.9, color: '#ffe14d', size: Math.max(16, cell * 0.32), kind: 'text', text: 'Yum!' });
         const left = maze.stars.filter((t) => !t.got).length;
-        if (left === 0) say(null, 'All the stars! ⭐');
+        if (left === 0) say(null, `I ate ALL the ${food.name.toLowerCase()}! ${food.emoji}`);
       }
     }
     for (const q of maze.powers) {
-      if (!q.got && q.x === a.x && q.y === a.y) {
-        q.got = true; power = powerTime();
-        sfx.power(); sparkle(px(q.x), py(q.y), 20);
-        banner = { text: 'Rainbow Power! 🌈', sub: 'Boop the ghosts!', t: 0 };
-        for (const g of ghosts) {
-          if (!g.released) continue;
-          say(g, 'Eek!');
-          if (g.moving) { [g.fx, g.tx] = [g.tx, g.fx]; [g.fy, g.ty] = [g.ty, g.fy]; g.dir = DIRS[g.dir].opp; }
-        }
-      }
+      if (!q.got && q.x === a.x && q.y === a.y) { q.got = true; sparkle(px(q.x), py(q.y), 20); startPower(); }
+    }
+    for (const q of maze.presents) {
+      if (!q.got && q.x === a.x && q.y === a.y) { q.got = true; openPresent(); return false; }
     }
     if (a.y === maze.rows) { win(); return false; }
     return true;
@@ -582,6 +663,17 @@
     return choices[Math.floor(Math.random() * choices.length)];
   }
 
+  function startPower() {
+    power = powerTime();
+    sfx.power();
+    banner = { text: 'Rainbow Power! 🌈', sub: 'Boop the ghosts!', t: 0 };
+    for (const g of ghosts) {
+      if (!g.released) continue;
+      say(g, 'Eek!');
+      if (g.moving) { [g.fx, g.tx] = [g.tx, g.fx]; [g.fy, g.ty] = [g.ty, g.fy]; g.dir = DIRS[g.dir].opp; }
+    }
+  }
+
   function boop(g) {
     boops++;
     sfx.boop();
@@ -610,7 +702,7 @@
     store.best = Math.max(store.best || 0, level); persist();
     sfx.win(); confetti(90);
     const got = maze.stars.filter((s) => s.got).length;
-    $('winStars').textContent = (got === maze.stars.length ? `And you found ALL ${got} stars! ⭐` : `You found ${got} of ${maze.stars.length} stars ⭐`) + (boops ? ` and booped ${boops} ghost${boops > 1 ? 's' : ''}! 👻` : '');
+    $('winStars').textContent = (got === maze.stars.length ? `And you ate ALL ${got} ${food.emoji}!` : `You ate ${got} of ${maze.stars.length} ${food.emoji}`) + (boops ? ` and booped ${boops} ghost${boops > 1 ? 's' : ''}! 👻` : '');
   }
 
   function say(g, text) {
@@ -646,11 +738,13 @@
     if (state === 'play') {
       levelClock += dt;
       invuln = Math.max(0, invuln - dt);
+      safe = Math.max(0, safe - dt);
       if (power > 0) {
         power = Math.max(0, power - dt);
         if (Math.random() < dt * 12) puff(px(uni.x), py(uni.y) + cell * 0.2, RAINBOW[Math.floor(Math.random() * 6)], 50, cell * 0.06, 0.5);
       }
-      stepActor(uni, 4.2, dt, uniDecide, uniArrive);
+      frozen = Math.max(0, frozen - dt); speedy = Math.max(0, speedy - dt);
+      stepActor(uni, speedy > 0 ? 6.5 : 4.2, dt, uniDecide, uniArrive);
       if (state !== 'play') return tickParticles(dt);
 
       for (const g of ghosts) {
@@ -658,9 +752,10 @@
           if (levelClock >= g.releaseAt) { g.released = true; say(g, g.G.says[0]); if (g.G.mood === 'silly') sfx.giggle(); }
           else continue;
         }
+        if (frozen > 0) continue;   // stuck in ice: can't move, can't bump
         stepActor(g, power > 0 ? g.speed * 0.6 : g.speed, dt, ghostDecide);
         if (power > 0 && Math.hypot(g.x - uni.x, g.y - uni.y) < 0.7) { boop(g); continue; }
-        if (Math.hypot(g.x - uni.x, g.y - uni.y) < 0.62 && invuln <= 0) {
+        if (Math.hypot(g.x - uni.x, g.y - uni.y) < 0.62 && invuln <= 0 && safe <= 0) {
           say(g, 'Boo!');
           hurt();
           // the ghost floats back home
@@ -681,6 +776,7 @@
 
   function tickParticles(dt) {
     for (const s of maze ? maze.stars : []) s.t += dt;
+    for (const s of maze ? maze.presents : []) s.t += dt;
     for (const p of particles) {
       p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
       if (p.kind !== 'confetti') { p.vx *= 0.94; p.vy *= 0.94; } else { p.rot += p.spin * dt; p.vx += Math.sin(clock * 3 + p.y * 0.02) * 4; }
@@ -703,13 +799,17 @@
     ctx.drawImage(mazeLayer, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    for (const s of maze.stars) if (!s.got) drawStar(px(s.x), py(s.y) + Math.sin(s.t * 4) * cell * 0.05, cell * 0.24, s.t);
+    for (const d of decorations) drawEmoji(d.emoji, px(d.x), py(d.y) + Math.sin(clock * 2 + d.x) * cell * 0.03, cell * 0.7);
+    for (const s of maze.stars) if (!s.got) drawEmoji(food.emoji, px(s.x), py(s.y) + Math.sin(s.t * 4) * cell * 0.05, cell * 0.55, true);
+    for (const q of maze.presents) if (!q.got) drawEmoji('🎁', px(q.x), py(q.y) + Math.abs(Math.sin(q.t * 3)) * -cell * 0.08, cell * 0.6, true, Math.sin(q.t * 6) * 0.12);
     for (const q of maze.powers) if (!q.got) drawPower(px(q.x), py(q.y), cell * (0.26 + Math.sin(clock * 5 + q.t) * 0.03));
 
     // Swipe hint on the very first level until they move
     if (!movedOnce && state === 'play') drawArrows();
 
     for (const g of ghosts) drawGhost(g);
+    if (frozen > 0) for (const g of ghosts) if (g.released) drawEmoji('❄️', px(g.x) + cell * 0.25, py(g.y) - cell * 0.3, cell * 0.32);
+    if (speedy > 0 && Math.random() < 0.5) puff(px(uni.x) - uni.face * cell * 0.3, py(uni.y) + cell * 0.2, '#ffe14d', 30, cell * 0.05, 0.4);
     const blink = invuln > 0 && Math.floor(invuln * 8) % 2 === 0;
     if (power > 0) {
       const fade = power < 2 ? 0.5 + 0.5 * Math.sin(clock * 20) : 1;
@@ -724,9 +824,34 @@
     drawBubbles();
     drawParticles();
     if (banner) drawBanner();
+    if (state === 'place' && placing) {
+      const a = 0.75 + 0.25 * Math.sin(clock * 5);
+      ctx.globalAlpha = a;
+      outlined(`Tap where you want your ${placing.name}! ${placing.emoji}`, VW / 2, Math.max(40, oy - 30), Math.min(30, VW / 18), '#ffe14d');
+      ctx.globalAlpha = 1;
+    }
   }
 
   const SKY = Array.from({ length: 60 }, () => ({ x: Math.random(), y: Math.random(), s: 0.5 + Math.random() * 1.3, p: Math.random() * 6 }));
+  // Emoji drawn through a small cache (crisp at any size, cheap to redraw)
+  const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+  const emojiCache = new Map();
+  function drawEmoji(ch, x, y, size, glow = false, rot = 0) {
+    const px2 = Math.max(16, Math.ceil((size * dpr) / 16) * 16), key = ch + px2;
+    let img = emojiCache.get(key);
+    if (!img) {
+      img = document.createElement('canvas'); img.width = img.height = Math.ceil(px2 * 1.25);
+      const g = img.getContext('2d');
+      g.font = `${px2}px ${EMOJI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(ch, img.width / 2, img.height / 2 + px2 * 0.06);
+      emojiCache.set(key, img);
+    }
+    if (glow) { ctx.fillStyle = 'rgba(255,255,255,.13)'; ctx.beginPath(); ctx.arc(x, y, size * 0.62, 0, 7); ctx.fill(); }
+    const s = size * 1.25;
+    if (rot) { ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.drawImage(img, -s / 2, -s / 2, s, s); ctx.restore(); }
+    else ctx.drawImage(img, x - s / 2, y - s / 2, s, s);
+  }
+
   function drawSkyStars() {
     ctx.fillStyle = '#fff';
     for (const s of SKY) { ctx.globalAlpha = 0.25 + 0.35 * Math.sin(clock * 1.5 + s.p); ctx.beginPath(); ctx.arc(s.x * VW, s.y * VH, s.s, 0, 7); ctx.fill(); }
@@ -737,6 +862,7 @@
     const size = Math.min(VW / 7, VH / 6.5, 110);
     const cy = VH * 0.5;
     drawUnicorn(VW / 2, cy - size * 0.2 + Math.sin(clock * 3) * 6, size / 80, 1, skin, true);
+    drawEmoji(food.emoji, VW / 2 + size * 0.85, cy - size * 0.45 + Math.sin(clock * 4) * 5, size * 0.42);
     const row = Math.min(VW * 0.9, size * 6);
     GHOSTS.forEach((G, i) => {
       const x = VW / 2 - row / 2 + (i + 0.5) * (row / 4);
@@ -972,6 +1098,88 @@
     sparkle(px(uni.x), py(uni.y), 16);
   }
 
+  // Presents in the maze
+  let prize = null;
+  function openPresent() {
+    state = 'present';
+    sfx.tick();
+    $('presentTitle').textContent = 'You found a present!';
+    $('presentClosed').hidden = false; $('presentOpen').hidden = true;
+    show('presentPop');
+  }
+  function revealPresent() {
+    if (state !== 'present' || !$('presentOpen').hidden) return;
+    prize = nextPrize || (Math.random() < 0.5
+      ? HELPERS[Math.floor(Math.random() * HELPERS.length)]
+      : TREASURES[Math.floor(Math.random() * TREASURES.length)]);
+    nextPrize = null;
+    sfx.gift(); confetti(30);
+    $('presentClosed').hidden = true; $('presentOpen').hidden = false;
+    $('prizeEmoji').textContent = prize.emoji;
+    if (prize.id === 'deco') {
+      $('presentTitle').textContent = 'A treasure for your maze!';
+      $('prizeText').textContent = `A ${prize.name}! Where should it go?`;
+      $('prizeOk').textContent = 'Put it in my maze!';
+    } else {
+      $('presentTitle').textContent = 'A magic helper!';
+      $('prizeText').textContent = prize.text;
+      $('prizeOk').textContent = 'Yay!';
+    }
+  }
+  function takePrize() {
+    if (state !== 'present' || !prize) return;
+    hide('presentPop');
+    if (prize.id === 'deco') { placing = prize; state = 'place'; prize = null; return; }
+    if (prize.id === 'heart') { hearts = Math.min(hearts + 1, 5); sparkle(px(uni.x), py(uni.y), 14); }
+    else if (prize.id === 'freeze') { frozen = 6; for (const g of ghosts) if (g.released) say(g, 'Brrr!'); }
+    else if (prize.id === 'speed') { speedy = 6; }
+    const wasPower = prize.id === 'power';
+    prize = null;
+    resumePlay();
+    if (wasPower) startPower();
+  }
+  function resumePlay() {
+    state = 'play';
+    safe = 1.2;
+    updateHud();
+  }
+  function placeAt(x, y) {
+    const cx = Math.floor((x - ox) / cell), cy = Math.floor((y - oy) / cell);
+    if (cx < 0 || cy < 0 || cx >= maze.cols || cy >= maze.rows) return false;
+    decorations.push({ x: cx, y: cy, emoji: placing.emoji });
+    sfx.place(); sparkle(px(cx), py(cy), 14);
+    placing = null;
+    resumePlay();
+    return true;
+  }
+
+  // Food picker on the title screen
+  function buildFoodGrid() {
+    const box = $('foodGrid');
+    box.innerHTML = '';
+    $('foodName').textContent = `${food.name}!`;
+    FOODS.forEach((f) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'food' + (f === food ? ' on' : ''); b.dataset.food = f.id;
+      b.textContent = f.emoji; b.setAttribute('aria-label', f.name);
+      b.addEventListener('click', () => {
+        food = f; store.food = f.id; persist();
+        sfx.nom();
+        for (const el of box.children) el.classList.toggle('on', el.dataset.food === f.id);
+        $('foodName').textContent = `${f.name}!`;
+        $('foodNow').textContent = f.emoji;
+      });
+      box.appendChild(b);
+    });
+  }
+  function openFood() { audio(); sfx.tick(); buildFoodGrid(); show('foodPicker'); }
+  function closeFood() { sfx.tick(); hide('foodPicker'); }
+  $('foodNow').textContent = food.emoji;
+  $('foodBtn').addEventListener('click', openFood);
+  $('foodDone').addEventListener('click', closeFood);
+  $('presentBox').addEventListener('click', revealPresent);
+  $('prizeOk').addEventListener('click', takePrize);
+
   function begin() {
     if (state !== 'title') return;
     audio(); sfx.tick();
@@ -989,7 +1197,7 @@
   let drag = null, lastTouch = 0;
   function pressStart(x, y) {
     audio();
-    if (state === 'title') { begin(); return; }
+    if (state === 'title') { if ($('foodPicker').classList.contains('hidden')) begin(); return; }
     drag = { x, y, moved: false };
   }
   function pressMove(x, y) {
@@ -998,6 +1206,7 @@
     if (Math.hypot(dx, dy) > 22) { steer(dirFrom(dx, dy), dx, dy); drag = { x, y, moved: true }; }
   }
   function pressEnd(x, y) {
+    if (drag && state === 'place' && placing) { placeAt(x, y); drag = null; return; }
     if (drag && !drag.moved && state === 'play' && uni) {
       const dx = x - px(uni.x), dy = y - py(uni.y);
       if (Math.hypot(dx, dy) > cell * 0.3) steer(dirFrom(dx, dy), dx, dy);
@@ -1046,6 +1255,14 @@
     get uni() { return uni && { x: uni.x, y: uni.y }; },
     _toExit() { uni = actor(maze.exitX, maze.rows - 1); uni.want = 'D'; invuln = 5; },
     _hit() { invuln = 0; hurt(); },
+    _restart() { ['surprise', 'lost', 'presentPop'].forEach(hide); startLevel(level); },
+    get food() { return food.id; }, get decorations() { return decorations.length; },
+    get presents() { return maze ? maze.presents.length : 0; },
+    _present(kind) {
+      nextPrize = kind === 'deco' ? TREASURES[0] : HELPERS.find((h) => h.id === kind);
+      const q = maze.presents.find((p) => !p.got); uni = actor(q.x, q.y); uniArrive(uni);
+    },
+    _cellScreen(x, y) { return { x: px(x), y: py(y) }; },
     _openDirs() { return Object.keys(DIRS).filter((d) => open(uni.tx, uni.ty, d)); },
     _uniScreen() { return { x: px(uni.x), y: py(uni.y) }; },
     get power() { return power; }, get boops() { return boops; },
