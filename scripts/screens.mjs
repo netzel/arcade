@@ -163,6 +163,43 @@ async function freshPass(browser, vp) {
   await t.ctx.close();
 }
 
+async function unicornPass(browser, vp) {
+  const t = await openContext(browser, vp);
+  const { page } = t;
+  await t.home();
+  await t.launch(2);
+  await t.shot('12-fotu-title');
+  const g = () => t.gameFrame();
+  const fill = await g().evaluate(() => {
+    const r = document.getElementById('c').getBoundingClientRect();
+    return r.width === innerWidth && r.height === innerHeight;
+  });
+  check(fill, 'flight: canvas fills the screen');
+  await t.frame().locator('.logo').click({ force: true });
+  check(await g().evaluate(() => window.__fotu.state) === 'play', 'flight: one tap starts the game');
+  // Keep flapping for a bit so there is something to see
+  for (let i = 0; i < 8; i++) { await t.frame().locator('body').click({ position: { x: 40, y: vp.height / 2 } }); await page.waitForTimeout(280); }
+  await t.shot('13-fotu-playing');
+  // Stop tapping: the unicorn floats down and the run ends
+  await page.waitForFunction(() => {
+    const f = [...document.querySelectorAll('iframe')][0];
+    return f && f.contentWindow.__fotu && f.contentWindow.__fotu.state === 'over';
+  }, null, { timeout: 15000 });
+  await page.waitForTimeout(900);
+  await t.shot('14-fotu-over');
+  const card = await g().evaluate(() => {
+    const r = document.querySelector('#over .card').getBoundingClientRect();
+    return { ok: r.top >= 0 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1, h: Math.round(r.height), vh: innerHeight };
+  });
+  check(card.ok, `flight: game-over card fits on screen (${card.h}px in ${card.vh}px)`);
+  await t.frame().locator('#again').click();
+  check(await g().evaluate(() => window.__fotu.state) === 'ready', 'flight: Fly again goes straight back to ready');
+  await t.frame().locator('body').click({ position: { x: 40, y: vp.height / 2 } });
+  check(await g().evaluate(() => window.__fotu.state) === 'play', 'flight: tapping again starts the next run');
+  check(t.errors.length === 0, `no page errors${t.errors.length ? ': ' + t.errors.join(' | ') : ''}`);
+  await t.ctx.close();
+}
+
 async function savesPass(browser, vp) {
   const t = await openContext(browser, vp, { forceSaves: true });
   const { page } = t;
@@ -222,6 +259,8 @@ try {
   for (const vp of VIEWPORTS) {
     console.log(`\n▶ ${vp.name} (${vp.width}x${vp.height})`);
     await freshPass(browser, vp);
+    console.log('  ↳ Flight of the Unicorn');
+    await unicornPass(browser, vp);
     if (vp.savesPass) {
       console.log('  ↳ with saves turned on');
       await savesPass(browser, vp);

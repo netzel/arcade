@@ -5,7 +5,10 @@
     "title": "Midnight's Forest Walk",
     "tagline": "Dodge rocks, munch berries, and make 5 butterfly friends!",
     "emoji": "🦄",
-    "colors": ["#7c3aed", "#1e1b4b"],
+    "colors": [
+      "#7c3aed",
+      "#1e1b4b"
+    ],
     "orientation": "landscape",
     "controls": "Tap top, middle, or bottom to switch paths",
     "background": "#06031a",
@@ -17,10 +20,28 @@
     "title": "Unicorn Meadow",
     "tagline": "Gallop around a magic meadow and collect all the stars!",
     "emoji": "🌈",
-    "colors": ["#f472b6", "#38bdf8"],
+    "colors": [
+      "#f472b6",
+      "#38bdf8"
+    ],
     "orientation": "any",
     "controls": "Tap where you want to go • ✨ to jump",
     "background": "#87ceeb",
+    "saves": false
+  },
+  {
+    "id": "flight-of-the-unicorn",
+    "file": "flight-of-the-unicorn.html",
+    "title": "Flight of the Unicorn",
+    "tagline": "Flap through the clouds, catch stars, and unlock new unicorns!",
+    "emoji": "🪽",
+    "colors": [
+      "#ff7eb6",
+      "#5ab8ff"
+    ],
+    "orientation": "any",
+    "controls": "Tap anywhere to flap",
+    "background": "#5ab8ff",
     "saves": false
   }
 ]
