@@ -175,10 +175,23 @@ async function unicornPass(browser, vp) {
     return r.width === innerWidth && r.height === innerHeight;
   });
   check(fill, 'flight: canvas fills the screen');
-  await t.frame().locator('.logo').click({ force: true });
-  check(await g().evaluate(() => window.__fotu.state) === 'play', 'flight: one tap starts the game');
+  // Real finger taps on phone/iPad sizes, mouse clicks on desktop
+  const tap = (x, y) => (vp.mobile ? page.touchscreen.tap(x, y) : page.mouse.click(x, y));
+  const tapEl = async (loc) => { const b = await loc.boundingBox(); await tap(b.x + b.width / 2, b.y + b.height / 2); };
+  const fotu = () => g().evaluate(() => ({ state: window.__fotu.state, flaps: window.__fotu.flaps }));
+  await tap(vp.width / 2, vp.height * 0.4);
+  await page.waitForTimeout(100);
+  let s = await fotu();
+  check(s.state === 'play' && s.flaps === 1, `flight: one ${vp.mobile ? 'tap' : 'click'} starts the game with exactly one flap (${s.state}, ${s.flaps} flaps)`);
   // Keep flapping for a bit so there is something to see
-  for (let i = 0; i < 8; i++) { await t.frame().locator('body').click({ position: { x: 40, y: vp.height / 2 } }); await page.waitForTimeout(280); }
+  let live = 1;
+  for (let i = 0; i < 8; i++) {
+    if ((await fotu()).state !== 'play') break;   // bumped a cloud early: fine
+    await tap(vp.width / 2, vp.height / 2); live++;
+    await page.waitForTimeout(280);
+  }
+  s = await fotu();
+  check(s.flaps === live, `flight: every tap flaps once (${s.flaps}/${live})`);
   await t.shot('13-fotu-playing');
   // Stop tapping: the unicorn floats down and the run ends
   await page.waitForFunction(() => {
@@ -192,10 +205,12 @@ async function unicornPass(browser, vp) {
     return { ok: r.top >= 0 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1, h: Math.round(r.height), vh: innerHeight };
   });
   check(card.ok, `flight: game-over card fits on screen (${card.h}px in ${card.vh}px)`);
-  await t.frame().locator('#again').click();
-  check(await g().evaluate(() => window.__fotu.state) === 'ready', 'flight: Fly again goes straight back to ready');
-  await t.frame().locator('body').click({ position: { x: 40, y: vp.height / 2 } });
-  check(await g().evaluate(() => window.__fotu.state) === 'play', 'flight: tapping again starts the next run');
+  await tapEl(t.frame().locator('#again'));
+  await page.waitForTimeout(100);
+  check((await fotu()).state === 'ready', 'flight: Fly again goes straight back to ready');
+  await tap(vp.width / 2, vp.height / 2);
+  await page.waitForTimeout(100);
+  check((await fotu()).state === 'play', 'flight: tapping again starts the next run');
   check(t.errors.length === 0, `no page errors${t.errors.length ? ': ' + t.errors.join(' | ') : ''}`);
   await t.ctx.close();
 }
