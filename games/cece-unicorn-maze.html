@@ -497,7 +497,8 @@
     }
   }
 
-  function steer(d) {
+  // d = the main direction; (vx, vy) = where the finger actually pointed
+  function steer(d, vx = DIRS[d].x, vy = DIRS[d].y) {
     if (state !== 'play' || !uni) return;
     uni.want = d;
     if (!movedOnce) movedOnce = true;
@@ -506,7 +507,17 @@
       uni.dir = d;
       if (d === 'L') uni.face = -1; else if (d === 'R') uni.face = 1;
     } else if (!uni.moving && !open(uni.tx, uni.ty, d)) {
-      sfx.bump();
+      // That way is a wall. Head down the open path that points most toward
+      // the tap instead; uni.want stays d so it turns that way when it can.
+      const len = Math.hypot(vx, vy) || 1;
+      let best = null, bestDot = -Infinity;
+      for (const k of Object.keys(DIRS)) {
+        if (!open(uni.tx, uni.ty, k)) continue;
+        const dot = (DIRS[k].x * vx + DIRS[k].y * vy) / len;
+        if (dot > bestDot) { bestDot = dot; best = k; }
+      }
+      if (best && bestDot > -0.5) uni.dir = best;
+      else sfx.bump();
     }
   }
 
@@ -984,12 +995,12 @@
   function pressMove(x, y) {
     if (!drag || state !== 'play') return;
     const dx = x - drag.x, dy = y - drag.y;
-    if (Math.hypot(dx, dy) > 22) { steer(dirFrom(dx, dy)); drag = { x, y, moved: true }; }
+    if (Math.hypot(dx, dy) > 22) { steer(dirFrom(dx, dy), dx, dy); drag = { x, y, moved: true }; }
   }
   function pressEnd(x, y) {
     if (drag && !drag.moved && state === 'play' && uni) {
       const dx = x - px(uni.x), dy = y - py(uni.y);
-      if (Math.hypot(dx, dy) > cell * 0.3) steer(dirFrom(dx, dy));
+      if (Math.hypot(dx, dy) > cell * 0.3) steer(dirFrom(dx, dy), dx, dy);
     }
     drag = null;
   }
@@ -1035,6 +1046,8 @@
     get uni() { return uni && { x: uni.x, y: uni.y }; },
     _toExit() { uni = actor(maze.exitX, maze.rows - 1); uni.want = 'D'; invuln = 5; },
     _hit() { invuln = 0; hurt(); },
+    _openDirs() { return Object.keys(DIRS).filter((d) => open(uni.tx, uni.ty, d)); },
+    _uniScreen() { return { x: px(uni.x), y: py(uni.y) }; },
     get power() { return power; }, get boops() { return boops; },
     get powers() { return maze ? maze.powers.length : 0; },
     _power() { const q = maze.powers.find((p) => !p.got); uni = actor(q.x, q.y); uniArrive(uni); },

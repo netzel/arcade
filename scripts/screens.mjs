@@ -232,6 +232,23 @@ async function mazePass(browser, vp) {
   let m = await mz();
   check(m.state === 'play' && m.level === 1 && m.hearts === 3, `maze: Play starts level 1 with 3 hearts (${m.state})`);
   const start = m.uni;
+  // Kids tap toward where they want to go, often at a slant. A tap that mostly
+  // points at a wall must still move the unicorn along the open way nearest to it.
+  {
+    const dirs = await g().evaluate(() => window.__maze._openDirs());
+    const at = await g().evaluate(() => window.__maze._uniScreen());
+    const V = { U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0] };
+    // Start corner: down (bottom wall) is blocked; pair it with an open sideways way
+    const side = dirs.includes('L') ? 'L' : null;
+    const main = side ? 'D' : 'R';
+    const perp = side || 'U';
+    const tx = at.x + V[main][0] * 45 + V[perp][0] * 15, ty = at.y + V[main][1] * 45 + V[perp][1] * 15;
+    await tap(tx, ty);
+    await page.waitForTimeout(600);
+    const after = (await mz()).uni;
+    check(after.x !== start.x || after.y !== start.y,
+      `maze: a slanted tap toward a wall (${main}, open: ${dirs.join('')}) still moves the unicorn (${start.x},${start.y} -> ${after.x.toFixed(1)},${after.y.toFixed(1)})`);
+  }
   // Tap above, then left of the unicorn: the start corner always opens one of those ways
   await tap(vp.width * 0.97, vp.height * 0.08);
   await page.waitForTimeout(700);
