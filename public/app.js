@@ -140,14 +140,29 @@ function route() {
 }
 
 // ── Home screen ────────────────────────────────────────────────────────
+const SOON_CARD_UNDER = 4; // show the "more games coming" card while the arcade is small
+
 function renderHome() {
   renderPlayerChip();
   renderSoundButtons();
+  const p = currentPlayer();
+  $('greeting').replaceChildren(
+    p ? `Hi ${p.name}! ` : 'Hi there! ',
+    h('span', { class: 'wave', 'aria-hidden': 'true' }, '👋'),
+    ' What do you want to play?',
+  );
   if (!GAMES.length) {
     els.grid.replaceChildren(h('p', { class: 'empty-state' }, 'No games yet! Add an .html game to the games folder. 🎮'));
     return;
   }
-  els.grid.replaceChildren(...GAMES.map((g, i) => gameCard(g, i)));
+  const cards = GAMES.map((g, i) => gameCard(g, i));
+  if (GAMES.length < SOON_CARD_UNDER) {
+    cards.push(h('div', { class: 'soon-card', style: { animationDelay: `${GAMES.length * 70}ms` } },
+      h('span', { class: 'soon-emoji', 'aria-hidden': 'true' }, '🎁'),
+      h('span', { class: 'soon-title' }, 'More games coming soon!'),
+      h('p', { class: 'soon-text' }, 'New adventures are on the way ✨')));
+  }
+  els.grid.replaceChildren(...cards);
 }
 
 function gameCard(g, i) {
