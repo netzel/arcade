@@ -1,6 +1,11 @@
 // End-to-end smoke test + screenshots at phone / iPad / desktop sizes.
 //   npm run screens         (builds first; uses your installed Chrome)
 // Screenshots land in screenshots/ (gitignored). Exits non-zero on failure.
+//
+// Two passes:
+//   1. "fresh"  — games as configured (saves off): every launch starts fresh.
+//   2. "saves"  — saves forced ON for the test only, to keep the save/load
+//                 path covered for future games that opt in.
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -14,14 +19,199 @@ const BASE = `http://127.0.0.1:${PORT}`;
 
 const VIEWPORTS = [
   { name: 'phone-portrait', width: 390, height: 844, mobile: true },
-  { name: 'phone-landscape', width: 844, height: 390, mobile: true },
-  { name: 'ipad-portrait', width: 820, height: 1180, mobile: true },
+  { name: 'phone-landscape', width: 844, height: 390, mobile: true, savesPass: true },
+  { name: 'ipad-portrait', width: 820, height: 1180, mobile: true, savesPass: true },
   { name: 'ipad-landscape', width: 1180, height: 820, mobile: true },
   { name: 'desktop', width: 1440, height: 900, mobile: false },
 ];
 
+// Test-only: flip every game's `saves` flag on as config.js assigns ARCADE_CONFIG.
+const FORCE_SAVES = () => {
+  Object.defineProperty(window, 'ARCADE_CONFIG', {
+    configurable: true,
+    get() { return undefined; },
+    set(v) {
+      (v.games || []).forEach((g) => { g.saves = true; });
+      Object.defineProperty(window, 'ARCADE_CONFIG', { value: v, writable: true, configurable: true });
+    },
+  });
+};
+
 const failures = [];
 function check(cond, msg) { if (!cond) { failures.push(msg); console.log(`   ✗ ${msg}`); } else console.log(`   ✓ ${msg}`); }
+
+async function openContext(browser, vp, { forceSaves = false } = {}) {
+  const ctx = await browser.newContext({
+    viewport: { width: vp.width, height: vp.height }, isMobile: vp.mobile, hasTouch: vp.mobile, deviceScaleFactor: 2,
+  });
+  if (forceSaves) await ctx.addInitScript(FORCE_SAVES);
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error' && !/fonts\.g|ERR_|Failed to load resource/.test(m.text())) errors.push(m.text()); });
+  const tag = forceSaves ? `${vp.name}-saves` : vp.name;
+  const t = {
+    ctx, page, errors,
+    shot: (n) => page.screenshot({ path: path.join(OUT, `${tag}-${n}.png`) }),
+    frame: () => page.frameLocator('#game-frame'),
+    gameFrame: () => page.frames().find((f) => f.url().includes('/games/')),
+    async home() {
+      await page.goto(BASE + '/');
+      await page.waitForFunction(() => document.body.dataset.screen);
+      if (await page.locator('#players').isVisible()) {
+        await t.shot('01-players');
+        await page.locator('.player-btn').first().click();
+      }
+      await page.locator('#home').waitFor();
+      await page.waitForTimeout(400);
+    },
+    async launch(cardIndex) {
+      await page.locator('.game-card').nth(cardIndex).locator('.btn-primary').first().click();
+      await t.loaded();
+    },
+    async loaded() {
+      await page.locator('#loading.done').waitFor({ timeout: 20000 });
+      await page.waitForTimeout(800);
+      if (await page.locator('#rotate-hint').isVisible()) {
+        await t.shot('rotate-hint');
+        await page.locator('#rotate-dismiss').click();
+      }
+    },
+    menu: () => page.locator('#menu-fab').click(),
+    tileNames: () => page.locator('.tile-grid .tile').allInnerTexts(),
+  };
+  return t;
+}
+
+async function freshPass(browser, vp) {
+  const t = await openContext(browser, vp);
+  const { page } = t;
+  await t.home();
+  await t.shot('02-home');
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  check(overflow <= 0, `home has no sideways scroll (overflow ${overflow}px)`);
+
+  // Midnight Walk: play, check layout + pause
+  await t.launch(0);
+  await t.shot('03-midnight-title');
+  await t.frame().locator('#b-start').click();
+  await page.waitForTimeout(1500);
+  await t.shot('04-midnight-playing');
+  const fit = await t.gameFrame().evaluate(() => {
+    const r = document.getElementById('gc').getBoundingClientRect();
+    return { bottom: r.bottom, right: r.right, vh: innerHeight, vw: innerWidth };
+  });
+  check(fit.bottom <= fit.vh + 1 && fit.right <= fit.vw + 1, `midnight canvas fits on screen (${Math.round(fit.right)}x${Math.round(fit.bottom)} in ${fit.vw}x${fit.vh})`);
+
+  await t.menu();
+  await page.waitForTimeout(400);
+  await t.shot('05-pause-menu');
+  const names = (await t.tileNames()).join(' | ').replace(/\n/g, ' ');
+  check(!/Save|Load/.test(names), `pause menu has no Save/Load for a no-saves game (${names})`);
+  const t1 = await t.gameFrame().evaluate(() => performance.now());
+  await page.waitForTimeout(400);
+  const t2 = await t.gameFrame().evaluate(() => performance.now());
+  check(t1 === t2, 'game clock is frozen while the menu is open');
+
+  // Leave mid-game, come back: should be a fresh game with no Continue
+  await page.getByRole('button', { name: /Arcade/ }).click();
+  await page.locator('#home').waitFor();
+  await page.waitForTimeout(400);
+  const card0 = await page.locator('.game-card').nth(0).innerText();
+  check(!/Continue|Saves/.test(card0), 'home card shows only Play after leaving mid-game');
+  const stored = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('sga:saves:')));
+  check(stored.length === 0, `nothing saved to the device (${stored.join(', ') || 'none'})`);
+  await t.launch(0);
+  check(await t.frame().locator('#ov-menu').isVisible(), 'returning starts a fresh game (title screen)');
+  check(!(await t.frame().locator('#ov-resume').isVisible()), 'no "Welcome back" screen');
+
+  // Refresh while in a game also starts fresh
+  await page.reload();
+  await t.loaded();
+  check(await t.frame().locator('#ov-menu').isVisible(), 'refreshing the page starts a fresh game');
+
+  // Switch to Unicorn Meadow from the menu
+  await t.menu();
+  await page.getByRole('button', { name: /Other Games/ }).click();
+  await t.shot('06-switch');
+  await page.locator('.switch-item').first().click();
+  await t.loaded();
+  await page.waitForTimeout(700);
+  await t.shot('07-meadow-title');
+  await t.frame().locator('#playBtn').click({ force: true }); // it pulses forever
+  await page.waitForTimeout(1500);
+  await t.shot('08-meadow-playing');
+
+  // Start over
+  await t.menu();
+  await page.getByRole('button', { name: /Start Over/ }).click();
+  await t.shot('09-confirm');
+  await page.getByRole('button', { name: 'Start over' }).click();
+  await t.loaded();
+  check(await t.frame().locator('#titleScreen').isVisible(), 'start over reloads the game fresh');
+
+  // Switch player from the in-game menu lands on the picker (and stays there)
+  await t.menu();
+  await page.getByRole('button', { name: /Switch Player/ }).click();
+  await page.waitForTimeout(500);
+  check(await page.locator('#players').isVisible(), 'Switch Player shows the player picker');
+  await page.locator('.player-btn').nth(1).click();
+  await page.locator('#home').waitFor();
+  check(/Alana/.test(await page.locator('#player-chip').innerText()), 'picking another player switches the header chip');
+
+  check(t.errors.length === 0, `no page errors${t.errors.length ? ': ' + t.errors.join(' | ') : ''}`);
+  await t.ctx.close();
+}
+
+async function savesPass(browser, vp) {
+  const t = await openContext(browser, vp, { forceSaves: true });
+  const { page } = t;
+  await t.home();
+  await t.launch(0);
+  await t.frame().locator('#b-start').click();
+  await page.waitForTimeout(1500);
+  await t.menu();
+  await page.getByRole('button', { name: /Save/ }).first().click();
+  await t.shot('10-save-slots');
+  await page.locator('.slot-main').first().click();
+  await page.waitForTimeout(300);
+  const saved = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('sga:saves:')));
+  check(saved.length > 0, `save written (${saved.join(', ')})`);
+  await page.getByRole('button', { name: /Arcade/ }).click();
+  await page.locator('#home').waitFor();
+  await page.waitForTimeout(400);
+  await t.shot('11-home-continue');
+  check(/Continue/.test(await page.locator('.game-card').nth(0).innerText()), 'home shows Continue when saves are on');
+
+  await t.launch(0);
+  check(await t.frame().locator('#ov-resume').isVisible(), 'Continue restores the run');
+  await t.menu();
+  await page.getByRole('button', { name: /Load/ }).first().click();
+  await page.locator('.slot-main:not([disabled])').first().click();
+  await page.getByRole('button', { name: 'Load it' }).click();
+  await t.loaded();
+  check(await t.frame().locator('#ov-resume').isVisible(), 'loading Save 1 restores the run');
+
+  // Meadow (WebGL) thumbnail
+  await t.menu();
+  await page.getByRole('button', { name: /Other Games/ }).click();
+  await page.locator('.switch-item').first().click();
+  await t.loaded();
+  await t.frame().locator('#playBtn').click({ force: true });
+  await page.waitForTimeout(1500);
+  await t.menu();
+  await page.getByRole('button', { name: /Save/ }).first().click();
+  await page.locator('.slot-main').first().click();
+  await page.waitForTimeout(300);
+  const thumb = await page.evaluate(() => {
+    const k = Object.keys(localStorage).find((x) => x.includes('unicorn-meadow'));
+    return k ? (JSON.parse(localStorage.getItem(k)).slots[0] || {}).thumb : null;
+  });
+  check(!!thumb && thumb.length > 2000, `meadow save has a real thumbnail (${thumb ? thumb.length : 0} chars)`);
+
+  check(t.errors.length === 0, `no page errors${t.errors.length ? ': ' + t.errors.join(' | ') : ''}`);
+  await t.ctx.close();
+}
 
 await fs.mkdir(OUT, { recursive: true });
 const server = spawn(process.execPath, [path.join(ROOT, 'scripts/serve.mjs')], { env: { ...process.env, PORT: String(PORT) }, stdio: 'ignore' });
@@ -31,116 +221,15 @@ const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'chro
 try {
   for (const vp of VIEWPORTS) {
     console.log(`\n▶ ${vp.name} (${vp.width}x${vp.height})`);
-    const ctx = await browser.newContext({
-      viewport: { width: vp.width, height: vp.height }, isMobile: vp.mobile, hasTouch: vp.mobile, deviceScaleFactor: 2,
-    });
-    const page = await ctx.newPage();
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(e.message));
-    page.on('console', (m) => { if (m.type() === 'error' && !/fonts\.g|ERR_|Failed to load resource/.test(m.text())) errors.push(m.text()); });
-    const shot = (n) => page.screenshot({ path: path.join(OUT, `${vp.name}-${n}.png`) });
-    const frame = () => page.frameLocator('#game-frame');
-    const gameFrame = () => page.frames().find((f) => f.url().includes('/games/'));
-
-    await page.goto(BASE + '/');
-    await page.waitForFunction(() => document.body.dataset.screen);
-    // Player picker (profiles are on when PUBLIC_PLAYERS is set)
-    if (await page.locator('#players').isVisible()) {
-      await shot('01-players');
-      await page.locator('.player-btn').first().click();
+    await freshPass(browser, vp);
+    if (vp.savesPass) {
+      console.log('  ↳ with saves turned on');
+      await savesPass(browser, vp);
     }
-    await page.locator('#home').waitFor();
-    await page.waitForTimeout(500);
-    await shot('02-home');
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    check(overflow <= 0, `home has no sideways scroll (overflow ${overflow}px)`);
-
-    // ── Midnight Walk ──
-    await page.locator('.game-card').nth(0).locator('.btn-primary').click();
-    await page.locator('#loading.done').waitFor({ timeout: 20000 });
-    await page.waitForTimeout(800);
-    if (await page.locator('#rotate-hint').isVisible()) {
-      await shot('03-rotate-hint');
-      await page.locator('#rotate-dismiss').click();
-    }
-    await shot('03-midnight-title');
-    await frame().locator('#b-start').click();
-    await page.waitForTimeout(1500);
-    await shot('04-midnight-playing');
-    const fit = await gameFrame().evaluate(() => {
-      const r = document.getElementById('gc').getBoundingClientRect();
-      return { bottom: r.bottom, right: r.right, vh: innerHeight, vw: innerWidth };
-    });
-    check(fit.bottom <= fit.vh + 1 && fit.right <= fit.vw + 1, `midnight canvas fits on screen (${Math.round(fit.right)}x${Math.round(fit.bottom)} in ${fit.vw}x${fit.vh})`);
-
-    await page.locator('#menu-fab').click();
-    await page.waitForTimeout(400);
-    await shot('05-pause-menu');
-    const t1 = await gameFrame().evaluate(() => performance.now());
-    await page.waitForTimeout(400);
-    const t2 = await gameFrame().evaluate(() => performance.now());
-    check(t1 === t2, 'game clock is frozen while the menu is open');
-
-    await page.getByRole('button', { name: /Save/ }).first().click();
-    await shot('06-save-slots');
-    await page.locator('.slot-main').first().click();
-    await page.waitForTimeout(300);
-    const saved = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('sga:saves:')));
-    check(saved.length > 0, `save written (${saved.join(', ')})`);
-    await page.getByRole('button', { name: /Arcade/ }).click();
-    await page.locator('#home').waitFor();
-    await page.waitForTimeout(500);
-    await shot('07-home-continue');
-    check(await page.locator('.game-card').nth(0).getByText('Continue').count() > 0, 'home shows Continue after leaving a game');
-
-    // Continue → resume overlay
-    await page.locator('.game-card').nth(0).locator('.btn-primary').click();
-    await page.locator('#loading.done').waitFor({ timeout: 20000 });
-    await page.waitForTimeout(800);
-    check(await frame().locator('#ov-resume').isVisible(), 'continue restores the run (Welcome back screen)');
-    await shot('08-midnight-resumed');
-
-    // Load from slot via menu
-    await page.locator('#menu-fab').click();
-    await page.getByRole('button', { name: /Load/ }).first().click();
-    await shot('09-load-slots');
-    await page.locator('.slot-main:not([disabled])').first().click();
-    await page.getByRole('button', { name: 'Load it' }).click();
-    await page.locator('#loading.done').waitFor({ timeout: 20000 });
-    await page.waitForTimeout(600);
-    check(await frame().locator('#ov-resume').isVisible(), 'loading Save 1 restores the run');
-
-    // Switch to Unicorn Meadow from the menu
-    await page.locator('#menu-fab').click();
-    await page.getByRole('button', { name: /Other Games/ }).click();
-    await shot('10-switch');
-    await page.locator('.switch-item').first().click();
-    await page.locator('#loading.done').waitFor({ timeout: 20000 });
-    await page.waitForTimeout(1500);
-    await shot('11-meadow-title');
-    await frame().locator('#playBtn').click({ force: true }); // it pulses forever
-    await page.waitForTimeout(1500);
-    await shot('12-meadow-playing');
-    await page.locator('#menu-fab').click();
-    await page.getByRole('button', { name: /Save/ }).first().click();
-    await page.locator('.slot-main').first().click();
-    await page.waitForTimeout(300);
-    const thumb = await page.evaluate(() => {
-      const k = Object.keys(localStorage).find((x) => x.includes('unicorn-meadow'));
-      return k ? (JSON.parse(localStorage.getItem(k)).slots[0] || {}).thumb : null;
-    });
-    check(!!thumb && thumb.length > 2000, `meadow save has a real thumbnail (${thumb ? thumb.length : 0} chars)`);
-
-    // Start over
-    await page.getByRole('button', { name: /Start Over/ }).click();
-    await shot('13-confirm');
-    await page.getByRole('button', { name: 'Start over' }).click();
-    await page.locator('#loading.done').waitFor({ timeout: 20000 });
-    check(await frame().locator('#titleScreen').isVisible(), 'start over reloads the game fresh');
-
-    check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
-    await ctx.close();
   }
+} catch (e) {
+  failures.push(`crashed: ${e.message.split('\n')[0]}`);
+  console.error(e);
 } finally {
   await browser.close();
   server.kill();

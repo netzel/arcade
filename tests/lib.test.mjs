@@ -68,3 +68,11 @@ test('buildManifest rejects bad orientation/background values', () => {
   assert.equal(games[0].orientation, 'any');
   assert.equal(games[0].background, '#000000');
 });
+
+test('saves are off unless a game explicitly opts in', () => {
+  const { games } = buildManifest(
+    [{ file: 'a.html' }, { file: 'b.html', saves: true }, { file: 'c.html', saves: 'yes' }, { file: 'd.html', saves: false }],
+    ['a.html', 'b.html', 'c.html', 'd.html'],
+  );
+  assert.deepEqual(games.map((g) => g.saves), [false, true, false, false]);
+});

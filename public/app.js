@@ -127,7 +127,7 @@ function route() {
     const launch = pendingLaunch && pendingLaunch.id === game.id ? pendingLaunch : null;
     pendingLaunch = null;
     // Refresh / deep link with no explicit intent: pick up where they left off.
-    const mode = launch ? launch.mode : (getSlot(storage, playerId(), game.id, 'auto') ? 'continue' : 'new');
+    const mode = launch ? launch.mode : (game.saves && getSlot(storage, playerId(), game.id, 'auto') ? 'continue' : 'new');
     startSession(game, mode, launch?.slot ?? null);
     return;
   }
@@ -151,7 +151,8 @@ function renderHome() {
 }
 
 function gameCard(g, i) {
-  const saves = readSaves(storage, playerId(), g.id);
+  // Games with saves turned off always start fresh: no Continue / Saves buttons.
+  const saves = g.saves ? readSaves(storage, playerId(), g.id) : { auto: null, slots: [] };
   const auto = saves.auto;
   const hasSlots = saves.slots.some(Boolean);
   const primary = () => playGame(g.id, auto ? 'continue' : 'new');
@@ -199,7 +200,8 @@ function startSession(game, mode, slot) {
   closeSheet();
 
   let restore = null;
-  if (mode === 'continue') restore = getSlot(storage, playerId(), game.id, 'auto');
+  if (!game.saves) restore = null;
+  else if (mode === 'continue') restore = getSlot(storage, playerId(), game.id, 'auto');
   else if (mode === 'slot') restore = getSlot(storage, playerId(), game.id, slot);
   try {
     if (restore) sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ gameId: game.id, version: restore.version, state: restore.state }));
@@ -282,7 +284,7 @@ window.ArcadeShell = {
 
 /** Write the Continue slot. Clears it if the game says there's nothing to keep. */
 function autosave() {
-  if (!session || !session.loaded || !session.canSave) return;
+  if (!session || !session.loaded || !session.game.saves || !session.canSave) return;
   const b = bridge();
   if (!b) return;
   let snap;
@@ -356,17 +358,19 @@ function toggleFullscreen() {
 function pauseView() {
   const g = session.game;
   const player = currentPlayer();
-  const saveOk = session.canSave;
+  const savesOn = !!g.saves;
+  const saveOk = savesOn && session.canSave;
   const subParts = [];
   if (player) subParts.push(`${player.emoji} ${player.name}`);
   if (g.controls) subParts.push(g.controls);
 
   const tiles = [
     tile('▶', 'Keep Playing', closeSheet, { wide: true, primary: true, autofocus: true }),
-    tile('💾', 'Save', () => saveView(), { disabled: !saveOk }),
-    tile('📂', 'Load', () => loadView(g), { disabled: !saveOk }),
+    savesOn ? tile('💾', 'Save', () => saveView(), { disabled: !saveOk }) : null,
+    savesOn ? tile('📂', 'Load', () => loadView(g), { disabled: !saveOk }) : null,
     tile('🔄', 'Start Over', () => confirmView({
-      emoji: '🔄', title: 'Start over?', message: 'This game starts from the beginning. Your saved games stay safe.',
+      emoji: '🔄', title: 'Start over?',
+      message: savesOn ? 'This game starts from the beginning. Your saved games stay safe.' : 'This game starts again from the beginning.',
       yes: 'Start over', danger: true, back: pauseView,
       onYes: () => { closeSheet(); deleteSave(storage, playerId(), g.id, 'auto'); session.canSave = false; startSession(g, 'new'); },
     })),
@@ -375,12 +379,21 @@ function pauseView() {
     tile('🏠', 'Arcade', () => { closeSheet(); goHome(); }),
   ];
   if (canFullscreen()) tiles.push(tile(isFullscreen() ? '🗗' : '⛶', isFullscreen() ? 'Exit Full Screen' : 'Full Screen', () => { toggleFullscreen(); closeSheet(); }));
-  if (PLAYERS.length > 1) tiles.push(tile('👋', 'Switch Player', () => { closeSheet(); location.hash = '#/'; showPlayerPicker(); }));
+  if (PLAYERS.length > 1) {
+    tiles.push(tile('👋', 'Switch Player', () => {
+      closeSheet();
+      // pushState (unlike setting location.hash) doesn't fire hashchange, so the
+      // home screen won't immediately replace the picker.
+      history.pushState(null, '', '#/');
+      endSession({ keepScreen: true });
+      showPlayerPicker();
+    }));
+  }
 
   openSheet('pause', [
     sheetHead({ emoji: g.emoji, title: g.title, sub: subParts.join(' · ') }),
-    h('div', { class: 'tile-grid' }, tiles),
-    saveOk ? null : h('p', { class: 'sheet-note' }, "This game doesn't support saving yet."),
+    h('div', { class: 'tile-grid' }, tiles.filter(Boolean)),
+    savesOn && !saveOk ? h('p', { class: 'sheet-note' }, "This game doesn't support saving yet.") : null,
   ]);
 }
 
@@ -472,12 +485,12 @@ function loadView(game, { fromHome = false } = {}) {
 function switchView() {
   const others = GAMES.filter((g) => g.id !== session.game.id);
   openSheet('switch', [
-    sheetHead({ emoji: '🎮', title: 'Play something else', sub: 'Your spot in this game is saved.', back: pauseView }),
+    sheetHead({ emoji: '🎮', title: 'Play something else', sub: session.game.saves ? 'Your spot in this game is saved.' : null, back: pauseView }),
     h('div', { class: 'switch-list' }, others.map((g) => h('button', {
       class: 'switch-item', type: 'button', vars: { '--c1': g.colors[0], '--c2': g.colors[1] },
       onclick: () => {
         closeSheet();
-        const auto = getSlot(storage, playerId(), g.id, 'auto');
+        const auto = g.saves && getSlot(storage, playerId(), g.id, 'auto');
         playGame(g.id, auto ? 'continue' : 'new');
       },
     }, h('span', { class: 'switch-emoji', 'aria-hidden': 'true' }, g.emoji), h('span', null, g.title)))),

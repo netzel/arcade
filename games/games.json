@@ -8,7 +8,8 @@
     "colors": ["#7c3aed", "#1e1b4b"],
     "orientation": "landscape",
     "controls": "Tap top, middle, or bottom to switch paths",
-    "background": "#06031a"
+    "background": "#06031a",
+    "saves": false
   },
   {
     "id": "unicorn-meadow",
@@ -19,6 +20,7 @@
     "colors": ["#f472b6", "#38bdf8"],
     "orientation": "any",
     "controls": "Tap where you want to go • ✨ to jump",
-    "background": "#87ceeb"
+    "background": "#87ceeb",
+    "saves": false
   }
 ]

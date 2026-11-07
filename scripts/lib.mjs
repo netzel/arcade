@@ -132,5 +132,6 @@ function normalize(entry, index) {
     controls: String(entry.controls || ''),
     menuButton,
     background,
+    saves: entry.saves === true, // off unless a game explicitly opts in
   };
 }

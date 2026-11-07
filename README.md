@@ -2,8 +2,8 @@
 
 Homemade games, one arcade. Live at **https://supergamesarcade.vercel.app**.
 
-Built for phones and iPads first; it also works on a computer. Players get their own saves,
-and every game gets a pause menu with **Save, Load, Start Over, Other Games, Sound, and Full Screen**.
+Built for phones and iPads first; it also works on a computer. Every game gets a pause menu with
+**Start Over, Other Games, Sound, Full Screen, and Switch Player**. Games that turn saving on also get **Save, Load, and Continue**.
 
 ## Quick start
 
@@ -37,7 +37,8 @@ npm run dev          # builds, then serves at http://localhost:4600
   "orientation": "landscape",             // landscape | portrait | any (phones get a "turn sideways" hint)
   "controls": "Tap to flap",              // shown in the pause menu
   "background": "#000000",                // color around the game
-  "menuButton": "top-left"                // where the ⏸ button sits: top-left | top-right | bottom-left | bottom-right
+  "menuButton": "top-left",               // where the ⏸ button sits: top-left | top-right | bottom-left | bottom-right
+  "saves": false                          // true = Save/Load/Continue for this game; false (default) = always starts fresh
 }
 ```
 
@@ -47,12 +48,17 @@ npm run dev          # builds, then serves at http://localhost:4600
 
 ## How saving works
 
-- Every game runs inside the arcade with a small helper script (`public/arcade-bridge.js`) added automatically at build time. That script lets the arcade **pause any game** (it freezes the animation and the clock), **mute it**, and take thumbnail pictures. The game doesn't have to do anything for this to work.
+Every game runs inside the arcade with a small helper script (`public/arcade-bridge.js`) added automatically at build time. It lets the arcade **pause any game** (freezing the animation and the clock) and **mute it**, whether or not saving is on. The game doesn't have to do anything for this to work.
+
+Saving is **off by default** and turned on per game with `"saves": true` in `games.json`. With it off (Midnight Walk and Unicorn Meadow are set to off), every visit starts a fresh game, nothing is stored, and the menu has no Save or Load buttons.
+
+When a game has saves turned on:
+
 - **Continue:** the arcade saves where you are every 20 seconds and whenever you leave the game, switch apps, or lock the iPad.
 - **Save slots:** each player gets 3 save slots per game.
 - Saves are kept in the browser on that device (`localStorage`). They don't sync between devices. Clearing Safari's website data erases them.
 
-A game can only save and load if it tells the arcade **how to describe its progress**. Midnight Walk and Unicorn Meadow already do this. Look for the `SUPER GAMES ARCADE` blocks near the end of each file. A game that doesn't still works, but its Save and Load buttons are greyed out.
+A game can only save and load if it tells the arcade **how to describe its progress**. Midnight Walk and Unicorn Meadow already include this code (the `SUPER GAMES ARCADE` blocks near the end of each file), so setting `"saves": true` is all they would need. If a game has `"saves": true` but doesn't include the code, it still plays, but its Save and Load buttons are greyed out.
 
 ### Paste this into Claude when you make a new game
 
