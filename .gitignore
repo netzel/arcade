@@ -1,0 +1,31 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# local env files (secrets): .env.example is committed instead
+.env
+.env.*
+!.env.example
+
+# vercel
+.vercel/
+
+# test / screenshot output
+screenshots/
+test-results/
+playwright-report/
+
+# logs & OS junk
+npm-debug.log*
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp

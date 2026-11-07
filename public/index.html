@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Super Games Arcade — homemade games to play on phone, iPad, or computer.">
+  <meta name="theme-color" content="#160c33">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Super Games Arcade">
+  <title>Super Games Arcade</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/config.js"></script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="sky" aria-hidden="true"></div>
+
+  <!-- Home: game picker -->
+  <section id="home" class="screen" aria-label="Pick a game">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-icon" aria-hidden="true">🕹️</span>
+        <h1 class="brand-name" id="site-name">Super Games Arcade</h1>
+      </div>
+      <div class="topbar-actions">
+        <button class="chip" id="player-chip" type="button" hidden></button>
+        <button class="icon-btn" id="home-sound" type="button" aria-label="Sound"></button>
+      </div>
+    </header>
+    <main class="game-grid" id="game-grid"></main>
+    <p class="footnote">Your games save on this device. ✨</p>
+  </section>
+
+  <!-- Who's playing? -->
+  <section id="players" class="screen screen-center" aria-label="Who's playing?" hidden>
+    <h2 class="big-title">Who's playing?</h2>
+    <div class="player-list" id="player-list"></div>
+  </section>
+
+  <!-- In-game -->
+  <section id="play" class="screen-play" aria-label="Game" hidden>
+    <div class="stage" id="stage">
+      <iframe id="game-frame" title="Game" allow="autoplay; fullscreen; gamepad; accelerometer; gyroscope"></iframe>
+      <div class="loading" id="loading">
+        <div class="loading-emoji" id="loading-emoji">🎮</div>
+        <div class="loading-text" id="loading-text">Loading…</div>
+        <div class="loading-actions" id="loading-actions" hidden>
+          <button class="btn btn-primary" type="button" id="loading-retry">Try again</button>
+          <button class="btn" type="button" id="loading-home">Back to arcade</button>
+        </div>
+      </div>
+    </div>
+    <button class="menu-fab" id="menu-fab" type="button" aria-label="Pause and open menu">
+      <span aria-hidden="true">⏸</span>
+    </button>
+  </section>
+
+  <!-- Turn your device hint -->
+  <div class="rotate-hint" id="rotate-hint" hidden>
+    <div class="rotate-card">
+      <div class="rotate-icon" aria-hidden="true">📱</div>
+      <p class="rotate-text" id="rotate-text">Turn your device sideways for a bigger game!</p>
+      <button class="btn" type="button" id="rotate-dismiss">Play this way</button>
+    </div>
+  </div>
+
+  <!-- Menus / dialogs -->
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet-card" id="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title"></div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <noscript><p class="noscript">Super Games Arcade needs JavaScript turned on.</p></noscript>
+</body>
+</html>

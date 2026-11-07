@@ -1,0 +1,19 @@
+{
+  "name": "super-games-arcade",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Super Games Arcade — a mobile-first arcade shell for homemade HTML games.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs && node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "screens": "node scripts/build.mjs && node scripts/screens.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.0"
+  }
+}
