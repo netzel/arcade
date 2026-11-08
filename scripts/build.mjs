@@ -40,15 +40,19 @@ async function main() {
   const { games, warnings } = buildManifest(meta, files, (f) => htmlTitle(sources.get(f) || ''));
   for (const w of warnings) console.warn(`  ! ${w}`);
 
+  // Each game is its own page: the bridge goes first, then the arcade config
+  // and the in-game menu (play.js). Cache-busted per build.
+  const buildId = Date.now().toString(36);
+  const extra = `<script src="/config.js?b=${buildId}"></script><script type="module" src="/play.js?b=${buildId}"></script>`;
   for (const g of games) {
-    await fs.writeFile(path.join(DIST, g.path), injectBridge(sources.get(g.file)));
+    await fs.writeFile(path.join(DIST, g.path), injectBridge(sources.get(g.file), `/arcade-bridge.js?b=${buildId}`, extra));
   }
 
   const config = {
     siteName: env.PUBLIC_SITE_NAME || 'Super Games Arcade',
     players: parsePlayers(env.PUBLIC_PLAYERS),
     analytics: parseBool(env.PUBLIC_ENABLE_VERCEL_ANALYTICS),
-    buildId: Date.now().toString(36),
+    buildId,
     games: games.map(({ file, ...pub }) => pub), // source filenames stay private
   };
   await fs.writeFile(

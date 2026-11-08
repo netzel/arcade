@@ -54,9 +54,9 @@ export function htmlTitle(html) {
 }
 
 /** Insert the bridge <script> as the very first thing in <head>. */
-export function injectBridge(html, src = '/arcade-bridge.js') {
+export function injectBridge(html, src = '/arcade-bridge.js', extra = '') {
   if (html.includes(src)) return html;
-  const tag = `<script src="${src}"></script>`;
+  const tag = `<script src="${src}"></script>${extra}`;
   const head = html.match(/<head[^>]*>/i);
   if (head) {
     const at = head.index + head[0].length;

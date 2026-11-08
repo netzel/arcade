@@ -24,26 +24,27 @@
  * state earlier (e.g. to pick a level before building the scene) can call
  * ArcadeBridge.peekRestore(version).
  *
- * Opening a game file directly (outside the arcade) still works: every call
- * here is a harmless no-op apart from the hooks.
+ * Games run as their own top-level page (no iframe: iOS can stop delivering
+ * touches to iframes until a reload). The in-game menu (play.js) runs on the
+ * same page and listens with ArcadeBridge.on(fn).
  */
 (function () {
   'use strict';
   if (window.ArcadeBridge) return;
 
   var RESTORE_KEY = 'sga:restore';
-  var shell = null;
-  try {
-    if (window.parent !== window && window.parent.ArcadeShell) shell = window.parent.ArcadeShell;
-  } catch (e) { shell = null; } // cross-origin parent: run standalone
 
   // Lets games style themselves differently inside the arcade, e.g.
   //   html.in-arcade #myFullscreenButton { display: none }
-  if (shell) document.documentElement.classList.add('in-arcade');
+  document.documentElement.classList.add('in-arcade');
 
+  // Events for the in-game menu. It loads after the game's own scripts, so
+  // the latest event of each type is kept and replayed when it subscribes.
+  var listeners = [];
+  var latest = {};
   function emit(type, data) {
-    if (!shell) return;
-    try { shell.bridgeEvent(type, data || {}, window); } catch (e) { /* shell gone */ }
+    latest[type] = data || {};
+    listeners.forEach(function (fn) { try { fn(type, latest[type]); } catch (e) { console.error(e); } });
   }
 
   // ── Clock: freeze performance.now() while paused ─────────────────────
@@ -231,7 +232,11 @@
   }, true);
 
   window.ArcadeBridge = {
-    inArcade: !!shell,
+    inArcade: true,
+    on: function (fn) {
+      listeners.push(fn);
+      Object.keys(latest).forEach(function (t) { if (t !== 'menu') { try { fn(t, latest[t]); } catch (e) { console.error(e); } } });
+    },
     register: function (h) {
       if (!h || typeof h.getState !== 'function' || typeof h.setState !== 'function') {
         console.warn('[arcade] register() needs getState and setState functions');

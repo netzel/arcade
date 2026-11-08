@@ -47,33 +47,6 @@
     <div class="player-list" id="player-list"></div>
   </section>
 
-  <!-- In-game -->
-  <section id="play" class="screen-play" aria-label="Game" hidden>
-    <div class="stage" id="stage">
-      <iframe id="game-frame" title="Game" allow="autoplay; fullscreen; gamepad; accelerometer; gyroscope"></iframe>
-      <div class="loading" id="loading">
-        <div class="loading-emoji" id="loading-emoji">🎮</div>
-        <div class="loading-text" id="loading-text">Loading…</div>
-        <div class="loading-actions" id="loading-actions" hidden>
-          <button class="btn btn-primary" type="button" id="loading-retry">Try again</button>
-          <button class="btn" type="button" id="loading-home">Back to arcade</button>
-        </div>
-      </div>
-    </div>
-    <button class="menu-fab" id="menu-fab" type="button" aria-label="Pause and open menu">
-      <span aria-hidden="true">⏸</span>
-    </button>
-  </section>
-
-  <!-- Turn your device hint -->
-  <div class="rotate-hint" id="rotate-hint" hidden>
-    <div class="rotate-card">
-      <div class="rotate-icon" aria-hidden="true">📱</div>
-      <p class="rotate-text" id="rotate-text">Turn your device sideways for a bigger game!</p>
-      <button class="btn" type="button" id="rotate-dismiss">Play this way</button>
-    </div>
-  </div>
-
   <!-- Menus / dialogs -->
   <div class="sheet" id="sheet" hidden>
     <div class="sheet-card" id="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title"></div>

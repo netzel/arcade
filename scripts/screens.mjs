@@ -6,7 +6,7 @@
 //   1. "fresh"  — games as configured (saves off): every launch starts fresh.
 //   2. "saves"  — saves forced ON for the test only, to keep the save/load
 //                 path covered for future games that opt in.
-import { chromium } from 'playwright';
+import { chromium, webkit } from 'playwright';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -53,8 +53,10 @@ async function openContext(browser, vp, { forceSaves = false } = {}) {
   const t = {
     ctx, page, errors,
     shot: (n) => page.screenshot({ path: path.join(OUT, `${tag}-${n}.png`) }),
-    frame: () => page.frameLocator('#game-frame'),
-    gameFrame: () => page.frames().find((f) => f.url().includes('/games/')),
+    // Games are their own page now (no iframe): the page is the game.
+    frame: () => page,
+    gameFrame: () => page.mainFrame(),
+    origin: 0,
     async home() {
       await page.goto(BASE + '/');
       await page.waitForFunction(() => document.body.dataset.screen);
@@ -69,8 +71,16 @@ async function openContext(browser, vp, { forceSaves = false } = {}) {
       await page.locator('.game-card').nth(cardIndex).locator('.btn-primary').first().click();
       await t.loaded();
     },
+    // Wait for a NEW game page (navigation or reload) with its menu mounted.
     async loaded() {
-      await page.locator('#loading.done').waitFor({ timeout: 20000 });
+      const until = Date.now() + 20000;
+      for (;;) {
+        const o = await page.evaluate(() => (location.pathname.startsWith('/games/') && window.ArcadeBridge && document.getElementById('sga-chrome')
+          && document.readyState === 'complete' ? performance.timeOrigin : 0)).catch(() => 0);
+        if (o && o !== t.origin) { t.origin = o; break; }
+        if (Date.now() > until) throw new Error('game page did not load');
+        await page.waitForTimeout(100);
+      }
       await page.waitForTimeout(800);
       if (await page.locator('#rotate-hint').isVisible()) {
         await t.shot('rotate-hint');
@@ -220,8 +230,7 @@ async function unicornPass(browser, vp) {
   await t.shot('13-fotu-playing');
   // Stop tapping: the unicorn floats down and the run ends
   await page.waitForFunction(() => {
-    const f = [...document.querySelectorAll('iframe')][0];
-    return f && f.contentWindow.__fotu && f.contentWindow.__fotu.state === 'over';
+    return window.__fotu && window.__fotu.state === 'over';
   }, null, { timeout: 15000 });
   await page.waitForTimeout(900);
   await t.shot('14-fotu-over');
@@ -241,8 +250,7 @@ async function unicornPass(browser, vp) {
   const lv = () => g().evaluate(() => ({ state: window.__fotu.state, level: window.__fotu.level, hearts: window.__fotu.hearts }));
   check((await lv()).level === 'normal', 'flight: Normal is the default level');
   await page.waitForFunction(() => {
-    const f = [...document.querySelectorAll('iframe')][0];
-    return f && f.contentWindow.__fotu && f.contentWindow.__fotu.state === 'over';
+    return window.__fotu && window.__fotu.state === 'over';
   }, null, { timeout: 15000 });
   await page.waitForTimeout(900);
   await tapEl(t.frame().locator('#toTitle'));
@@ -268,6 +276,28 @@ async function unicornPass(browser, vp) {
   await page.reload();
   await t.loaded();
   check((await lv()).level === 'easy', 'flight: the picked level is remembered');
+
+  // Taps must reach the game directly: no iframe, and the menu button's taps stay out of the game
+  check(await page.evaluate(() => window.top === window && !document.querySelector('iframe')), 'flight: the game is the top-level page (no iframe)');
+  const fab = await page.locator('#menu-fab').boundingBox();
+  await tap(fab.x + fab.width / 2, fab.y + fab.height / 2);
+  await page.waitForTimeout(400);
+  check((await lv()).state === 'title' && await page.getByRole('button', { name: /Keep Playing/ }).isVisible(), 'flight: tapping ⏸ opens the menu without starting the game');
+  await tapEl(page.getByRole('button', { name: /Keep Playing/ }));
+  await page.waitForTimeout(400);
+  check((await lv()).state === 'title', 'flight: Keep Playing closes the menu without starting the game');
+  // Leave for the arcade, come back with Back, and taps still work
+  await page.locator('#menu-fab').click();
+  await page.getByRole('button', { name: /Arcade/ }).click();
+  await page.locator('#home').waitFor();
+  await page.goBack();
+  await t.loaded().catch(() => {});      // a back/forward-cache restore keeps the old page
+  await page.waitForTimeout(500);
+  const keep = page.getByRole('button', { name: /Keep Playing/ });
+  if (await keep.isVisible()) { await tapEl(keep); await page.waitForTimeout(400); }
+  await tap(vp.width / 2, vp.height * 0.3);
+  await page.waitForTimeout(150);
+  check((await lv()).state === 'play', `flight: after Back to the game, a tap still flies (${(await lv()).state})`);
   check(t.errors.length === 0, `no page errors${t.errors.length ? ': ' + t.errors.join(' | ') : ''}`);
   await t.ctx.close();
 }
@@ -552,7 +582,10 @@ async function pauseRacePass(browser, vp) {
 await fs.mkdir(OUT, { recursive: true });
 const server = spawn(process.execPath, [path.join(ROOT, 'scripts/serve.mjs')], { env: { ...process.env, PORT: String(PORT) }, stdio: 'ignore' });
 await new Promise((r) => setTimeout(r, 600));
-const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'chrome', args: ['--use-gl=angle', '--enable-unsafe-swiftshader'] });
+// PW_ENGINE=webkit runs the same suite on WebKit (Safari's engine).
+const browser = process.env.PW_ENGINE === 'webkit'
+  ? await webkit.launch()
+  : await chromium.launch({ channel: process.env.PW_CHANNEL || 'chrome', args: ['--use-gl=angle', '--enable-unsafe-swiftshader'] });
 
 try {
   console.log('\n▶ robustness');

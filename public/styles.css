@@ -1,6 +1,6 @@
 /* Super Games Arcade — shell styles. Mobile first; scales up to iPad and desktop. */
 
-:root {
+:root, :host {
   --bg-1: #160c33;
   --bg-2: #2a1260;
   --ink: #fff8ff;
@@ -182,22 +182,6 @@ button { font: inherit; color: inherit; }
 .player-name { font-size: clamp(22px, 5vw, 30px); font-weight: 700; }
 
 /* ── In-game ─────────────────────────────────────────────── */
-.screen-play { position: fixed; inset: 0; background: #000; }
-.stage {
-  position: absolute; inset: 0;
-  padding: var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
-  background: var(--game-bg, #000);
-}
-#game-frame { display: block; width: 100%; height: 100%; border: 0; background: var(--game-bg, #000); }
-.loading {
-  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-  background: linear-gradient(135deg, var(--c1, #2a1260), var(--c2, #160c33));
-  transition: opacity 0.35s ease;
-}
-.loading.done { opacity: 0; pointer-events: none; }
-.loading-emoji { font-size: 84px; animation: bob 1.4s ease-in-out infinite; }
-.loading-text { font-size: 24px; font-weight: 600; text-align: center; padding: 0 20px; }
-.loading-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 
 .menu-fab {
   position: fixed; z-index: 20;
