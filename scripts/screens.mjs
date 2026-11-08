@@ -236,6 +236,38 @@ async function unicornPass(browser, vp) {
   await tap(vp.width / 2, vp.height / 2);
   await page.waitForTimeout(100);
   check((await fotu()).state === 'play', 'flight: tapping again starts the next run');
+
+  // Difficulty: Easy gives 3 hearts and a bump doesn't end the run
+  const lv = () => g().evaluate(() => ({ state: window.__fotu.state, level: window.__fotu.level, hearts: window.__fotu.hearts }));
+  check((await lv()).level === 'normal', 'flight: Normal is the default level');
+  await page.waitForFunction(() => {
+    const f = [...document.querySelectorAll('iframe')][0];
+    return f && f.contentWindow.__fotu && f.contentWindow.__fotu.state === 'over';
+  }, null, { timeout: 15000 });
+  await page.waitForTimeout(900);
+  await tapEl(t.frame().locator('#toTitle'));
+  await page.waitForTimeout(500);
+  await tapEl(t.frame().locator('#closetDone'));
+  await page.waitForTimeout(500);
+  await tapEl(t.frame().locator('.lvl[data-level="easy"]'));
+  await page.waitForTimeout(200);
+  let l = await lv();
+  check(l.level === 'easy' && l.state === 'title', `flight: tapping Easy picks it without starting (${l.level}, ${l.state})`);
+  await t.shot('12c-fotu-levels');
+  const tb = await g().evaluate(() => { const r = document.querySelector('.title-bottom').getBoundingClientRect(); return { ok: r.bottom <= innerHeight + 1 && r.top >= 0, b: Math.round(r.bottom), vh: innerHeight }; });
+  check(tb.ok, `flight: title controls fit on screen (${tb.b} in ${tb.vh})`);
+  await tap(vp.width / 2, vp.height * 0.3);
+  await page.waitForTimeout(100);
+  l = await lv();
+  check(l.state === 'play' && l.hearts === 3, `flight: Easy starts with 3 hearts (${l.state}, ${l.hearts})`);
+  await g().evaluate(() => window.__fotu._hit());
+  await page.waitForTimeout(100);
+  l = await lv();
+  check(l.state === 'play' && l.hearts === 2, `flight: on Easy a bump costs a heart and keeps flying (${l.state}, ${l.hearts})`);
+  await t.shot('13b-fotu-easy-hearts');
+  await page.reload();
+  await t.loaded();
+  check((await lv()).level === 'easy', 'flight: the picked level is remembered');
   check(t.errors.length === 0, `no page errors${t.errors.length ? ': ' + t.errors.join(' | ') : ''}`);
   await t.ctx.close();
 }

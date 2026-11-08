@@ -69,6 +69,15 @@
   .skin.magic::after { display: none; }
   .skin.magic .em { font-size: clamp(22px, 5.4vmin, 32px); line-height: 1; }
   .skin.magic.locked .em { opacity: .3; }
+  .levels { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .lvl {
+    font: inherit; font-weight: 700; font-size: clamp(16px, 3.8vmin, 21px); color: #7c3aed; cursor: pointer;
+    background: rgba(255,255,255,.85); border: 3px solid rgba(255,255,255,.9); border-radius: 999px; padding: 6px 16px;
+    box-shadow: 0 4px 0 rgba(60, 20, 120, .3); transition: transform .12s;
+  }
+  .lvl.on { background: linear-gradient(180deg, #ffe97a, #ffc93d); color: #5b2a00; border-color: #fff; transform: scale(1.08); box-shadow: 0 4px 0 #d99a00, 0 6px 14px rgba(255, 180, 0, .5); }
+  .lvl:active { transform: translateY(3px); }
+  .level-tag { font-weight: 600; font-size: 15px; color: #8a6bc4; }
   .closet-btn { position: relative; font-size: clamp(17px, 4vmin, 22px); padding: 10px 22px; }
   .badge {
     position: absolute; top: -10px; right: -12px; background: #ff5e8a; color: #fff; font-size: 13px; padding: 2px 8px;
@@ -138,6 +147,7 @@
     .scores b { font-size: 30px; }
     .logo { margin-top: 0; }
     .title-bottom { gap: 8px; }
+    .lvl { padding: 4px 13px; }
     .card.closet-card { flex-direction: column; align-items: stretch; gap: 6px; padding: 12px 16px; }
     .closet-card h2 { display: none; }
   }
@@ -155,6 +165,11 @@
   <div class="logo"><small>Flight of the</small><b>Unicorn</b></div>
   <div class="title-bottom">
     <div class="tap-hint">👆 Tap to fly!</div>
+    <div class="levels" id="levels" role="radiogroup" aria-label="How hard?">
+      <button class="lvl" type="button" data-level="easy" role="radio">🐣 Easy</button>
+      <button class="lvl" type="button" data-level="normal" role="radio">🦄 Normal</button>
+      <button class="lvl" type="button" data-level="hard" role="radio">🔥 Hard</button>
+    </div>
     <div class="skin-name" id="skinName"></div>
     <button class="btn btn-alt closet-btn" id="closetBtn" type="button">🎨 Colors &amp; Magic<span class="badge" id="newBadge" hidden>NEW!</span></button>
     <div class="jar">⭐ <span id="jarCount">0</span> stars<span id="jarNext"></span></div>
@@ -187,6 +202,7 @@
         <div><small>Score</small><b id="overScore">0</b></div>
         <div><small>Best</small><b id="overBest">0</b></div>
       </div>
+      <div class="level-tag" id="levelTag"></div>
       <div class="newbest" id="newBest" hidden>✨ New best! ✨</div>
       <div class="runstars" id="runStars"></div>
       <div class="unlock" id="unlockMsg"></div>
@@ -252,8 +268,9 @@
   resize();
 
   // ================= Saved progress (best score + star jar only) =================
-  let store = { best: 0, stars: 0, skin: 'snow', magic: 'none', seen: 0 };
+  let store = { best: 0, stars: 0, skin: 'snow', magic: 'none', seen: 0, level: 'normal', bests: null };
   try { store = Object.assign(store, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch (e) { /* private mode */ }
+  if (!store.bests) store.bests = { easy: 0, normal: store.best || 0, hard: 0 };
   function persist() { try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) { /* ignore */ } }
   const skinById = (id) => SKINS.find((s) => s.id === id) || SKINS[0];
   const unlocked = (s) => store.stars >= s.need;
@@ -325,15 +342,36 @@
 
   function unicornX() { return Math.max(70, Math.min(W * 0.3, 190)); }
 
-  const difficulty = () => ({
-    gap: score < 4 ? 235 : Math.max(168, 222 - (score - 4) * 2.2),
-    speed: Math.min(245, 140 + score * 3.2),
-    spacing: Math.max(235, 290 - score * 2),
-    jump: Math.min(230, 120 + score * 4),
-  });
+  // How hard. Normal is the original game, number for number. Each level
+  // flaps to about the same height; gravity changes how floaty it feels.
+  const LEVELS = {
+    easy: { name: 'Easy', emoji: '🐣', hearts: 3, stars: 1, gravity: 1050, flap: 360, fall: 480,
+      gapStart: 270, gapBase: 262, gapMin: 215, shrink: 1.2, speed0: 118, speedK: 2, speedMax: 190,
+      space0: 320, spaceK: 1.5, spaceMin: 270, jump0: 90, jumpK: 3, jumpMax: 170 },
+    normal: { name: 'Normal', emoji: '🦄', hearts: 1, stars: 1, gravity: 1250, flap: 390, fall: 560,
+      gapStart: 235, gapBase: 222, gapMin: 168, shrink: 2.2, speed0: 140, speedK: 3.2, speedMax: 245,
+      space0: 290, spaceK: 2, spaceMin: 235, jump0: 120, jumpK: 4, jumpMax: 230 },
+    hard: { name: 'Hard', emoji: '🔥', hearts: 1, stars: 2, gravity: 1450, flap: 420, fall: 640,
+      gapStart: 212, gapBase: 205, gapMin: 150, shrink: 2.6, speed0: 170, speedK: 3.6, speedMax: 290,
+      space0: 270, spaceK: 2, spaceMin: 220, jump0: 140, jumpK: 4.5, jumpMax: 260 },
+  };
+  let level = LEVELS[store.level] ? store.level : 'normal';
+  const L = () => LEVELS[level];
+  let hearts = 1, invuln = 0;
+
+  const difficulty = () => {
+    const l = L();
+    return {
+      gap: score < 4 ? l.gapStart : Math.max(l.gapMin, l.gapBase - (score - 4) * l.shrink),
+      speed: Math.min(l.speedMax, l.speed0 + score * l.speedK),
+      spacing: Math.max(l.spaceMin, l.space0 - score * l.spaceK),
+      jump: Math.min(l.jumpMax, l.jump0 + score * l.jumpK),
+    };
+  };
 
   function resetRun() {
     score = 0; runStars = 0; nextMilestone = 10;
+    hearts = L().hearts; invuln = 0;
     starsBefore = store.stars;
     pillars = []; stars = []; banners = []; trail = [];
     uni.x = unicornX(); uni.y = 260; uni.vy = 0; uni.rot = 0; uni.spin = 0;
@@ -361,7 +399,7 @@
   let flaps = 0;
   function flap() {
     flaps++;
-    uni.vy = -390;
+    uni.vy = -L().flap;
     uni.wing = 1;
     sfx.flap();
     for (let i = 0; i < 4; i++) puff(uni.x - 14, uni.y + 10, '#ffffff', 60);
@@ -463,6 +501,21 @@
     $('skinName').textContent = magic.id === 'none' ? skin.name : `${skin.name} + ${magic.emoji} ${magic.name}`;
     $('newBadge').hidden = topUnlocked() <= (store.seen || 0);
   }
+  function renderLevels() {
+    document.querySelectorAll('.lvl').forEach((b) => {
+      const on = b.dataset.level === level;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', on);
+    });
+  }
+  document.querySelectorAll('.lvl').forEach((b) => b.addEventListener('click', () => {
+    if (state !== 'title') return;
+    audio();
+    level = b.dataset.level; store.level = level; persist();
+    sfx.tick();
+    renderLevels();
+  }));
+  renderLevels();
   const closetOpen = () => !$('closet').classList.contains('hidden');
   function openCloset() {
     store.seen = topUnlocked(); persist();
@@ -607,7 +660,8 @@
       uni.rot = uni.vy / 900;
       if (Math.sin(clock * 3) > 0.95 && uni.wing < 0.1) uni.wing = 1;
     } else if (state === 'play') {
-      uni.vy = Math.min(uni.vy + 1250 * dt, 560);
+      uni.vy = Math.min(uni.vy + L().gravity * dt, L().fall);
+      invuln = Math.max(0, invuln - dt);
       uni.y += uni.vy * dt;
       if (uni.y < 22) { uni.y = 22; uni.vy = Math.max(uni.vy, 0); }   // the sky is soft: no ceiling deaths
       const targetRot = Math.max(-0.45, Math.min(0.9, uni.vy / 650));
@@ -635,19 +689,20 @@
             sparkle(uni.x, uni.y, 18);
           }
         }
-        if (hitsPillar(p)) return crash();
+        if (invuln <= 0 && hitsPillar(p)) { if (hit(false)) return; }
       }
       for (const s of stars) {
         if (!s.got && Math.hypot(s.x - uni.x, s.y - uni.y) < 34) {
-          s.got = true; s.t = 0; runStars++; store.stars++;
+          const before = store.stars, gain = L().stars;
+          s.got = true; s.t = 0; runStars += gain; store.stars += gain;
           sfx.star();
-          const prize = LADDER.find((r) => r.need === store.stars);
+          const prize = LADDER.find((r) => r.need > before && r.need <= store.stars);
           if (prize) { banner(prize.magic ? `${prize.emoji} New magic!` : '🦄 New color!'); sfx.cheer(); sparkle(uni.x, uni.y, 24); }
           sparkle(s.x, s.y, 10);
-          popText(s.x, s.y - 28, '⭐', '#ffe14d');
+          popText(s.x, s.y - 28, gain > 1 ? `⭐x${gain}` : '⭐', '#ffe14d');
         }
       }
-      if (uni.y + R_HIT > GROUND) { uni.y = GROUND - R_HIT; return crash(); }
+      if (uni.y + R_HIT > GROUND) { uni.y = GROUND - R_HIT; if (hit(true)) return; }
 
       // Rainbow trail
       trail.push({ x: uni.x - 20, y: uni.y + 4 });
@@ -699,6 +754,24 @@
     return false;
   }
 
+  // A bump: on Easy it costs a heart and the unicorn keeps flying.
+  // Returns true when the run is over.
+  function hit(ground) {
+    if (hearts > 1) {
+      hearts--;
+      invuln = 1.6;
+      shake = 0.2; flash = 0.5;
+      sfx.bonk();
+      if (navigator.vibrate) try { navigator.vibrate(25); } catch (e) { /* ignore */ }
+      for (let i = 0; i < 8; i++) puff(uni.x, uni.y, '#ffffff', 160, 6, 0.5);
+      popText(uni.x, uni.y - 44, hearts === 1 ? 'Last heart!' : 'Oops!', '#ff5e8a', 22);
+      if (ground) uni.vy = -L().flap * 1.15;
+      return false;
+    }
+    crash();
+    return true;
+  }
+
   function crash() {
     state = 'dying';
     overAt = clock;
@@ -714,12 +787,14 @@
     if (state !== 'dying') return;
     state = 'over';
     overAt = clock;
-    const isBest = score > store.best && score > 0;
-    if (isBest) store.best = score;
+    const isBest = score > (store.bests[level] || 0) && score > 0;
+    if (isBest) store.bests[level] = score;
+    store.best = Math.max(store.best || 0, score);
     persist();
 
     $('overScore').textContent = score;
-    $('overBest').textContent = store.best;
+    $('overBest').textContent = store.bests[level];
+    $('levelTag').textContent = `${L().emoji} ${L().name}${L().stars > 1 ? ' · stars count double!' : ''}`;
     $('newBest').hidden = !isBest;
     $('medal').textContent = score >= 40 ? '🏆' : score >= 20 ? '🥇' : score >= 10 ? '🥈' : score >= 5 ? '🥉' : '🦄';
     $('overMsg').textContent =
@@ -827,7 +902,7 @@
     ground(night);
     for (const s of stars) drawStar(s);
     drawTrail();
-    drawUnicorn(uni.x, uni.y, uni.rot, uni.wing, skin, state === 'dying' || state === 'over');
+    if (!(invuln > 0 && state === 'play' && Math.sin(clock * 30) > 0.3)) drawUnicorn(uni.x, uni.y, uni.rot, uni.wing, skin, state === 'dying' || state === 'over');
     for (const b of flock) drawButterfly(b);
     drawParticles();
     hud();
@@ -1128,6 +1203,16 @@
       const pop = particles.some((p) => p.kind === 'text' && p.text === '+1' && p.life > p.max - 0.15) ? 1.15 : 1;
       outlined(String(score), W / 2, 62, 58 * pop);
       if (runStars) outlined(`⭐ ${runStars}`, W - 18, 38, 26, '#ffe14d', 'right');
+      if (L().hearts > 1) {
+        for (let i = 0; i < L().hearts; i++) {
+          const hx = W / 2 + (i - (L().hearts - 1) / 2) * 30, full = i < hearts;
+          ctx.globalAlpha = full ? 1 : 0.35;
+          ctx.fillStyle = full ? '#ff4f9a' : '#ffffff';
+          heartPath(hx, 112, 11); ctx.fill();
+          ctx.lineWidth = 2.5; ctx.strokeStyle = '#5b21b6'; ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
     }
     for (const b of banners) {
       const t = b.t, s = t < 0.25 ? t / 0.25 : 1;
@@ -1163,6 +1248,8 @@
   // Tiny hook for automated tests
   window.__fotu = { get state() { return state; }, get score() { return score; }, get flaps() { return flaps; }, get frames() { return frames; },
     get magic() { return magic.id; }, get toots() { return toots; }, get jar() { return store.stars; },
+    get level() { return level; }, get hearts() { return hearts; },
+    _hit() { invuln = 0; if (state === 'play') hit(false); },
     _stars(n) { store.stars = n; persist(); renderTitle(); if (closetOpen()) renderCloset(); } };
 })();
 </script>
