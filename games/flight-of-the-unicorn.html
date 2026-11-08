@@ -65,6 +65,25 @@
     background: #3b1d6e; color: #ffe14d; font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap;
   }
   .skin-name { color: #fff; font-weight: 600; font-size: clamp(15px, 3.4vmin, 22px); text-shadow: 0 2px 0 rgba(80, 30, 160, .55); min-height: 1.3em; }
+  .skin.magic { background: radial-gradient(circle at 40% 35%, #ffffff, #efe2ff); display: grid; place-items: center; }
+  .skin.magic::after { display: none; }
+  .skin.magic .em { font-size: clamp(22px, 5.4vmin, 32px); line-height: 1; }
+  .skin.magic.locked .em { opacity: .3; }
+  .closet-btn { position: relative; font-size: clamp(17px, 4vmin, 22px); padding: 10px 22px; }
+  .badge {
+    position: absolute; top: -10px; right: -12px; background: #ff5e8a; color: #fff; font-size: 13px; padding: 2px 8px;
+    border-radius: 999px; border: 2px solid #fff; animation: pulse 1s ease-in-out infinite;
+  }
+  .badge[hidden] { display: none; }
+  #closet { justify-content: center; background: rgba(40, 10, 90, .35); z-index: 5; }
+  .closet-card { width: min(560px, 100%); gap: 10px; touch-action: pan-y; }
+  #closet.hidden .card { transform: translateY(60px) scale(.85); }
+  .closet-card h2 { margin: 0; font-size: clamp(24px, 6vmin, 34px); color: #7c3aed; }
+  .closet-card h3 { margin: 4px 0 0; font-size: clamp(16px, 3.6vmin, 20px); color: #8a6bc4; }
+  .closet-card .skins { gap: 12px 10px; padding-bottom: 6px; }
+  .closet-card .skin { width: clamp(46px, 10vmin, 62px); height: clamp(46px, 10vmin, 62px); }
+  .closet-msg { font-weight: 600; font-size: clamp(15px, 3.4vmin, 19px); color: #e8459a; min-height: 1.3em; }
+  .closet-card .jar { align-self: center; box-shadow: inset 0 -3px 0 #eadcff; }
   .jar {
     color: #3b1d6e; background: rgba(255,255,255,.85); padding: 4px 14px; border-radius: 999px;
     font-weight: 600; font-size: clamp(14px, 3vmin, 19px);
@@ -119,6 +138,8 @@
     .scores b { font-size: 30px; }
     .logo { margin-top: 0; }
     .title-bottom { gap: 8px; }
+    .card.closet-card { flex-direction: column; align-items: stretch; gap: 6px; padding: 12px 16px; }
+    .closet-card h2 { display: none; }
   }
 
   @keyframes float { 50% { transform: translateY(-8px); } }
@@ -135,8 +156,21 @@
   <div class="title-bottom">
     <div class="tap-hint">👆 Tap to fly!</div>
     <div class="skin-name" id="skinName"></div>
+    <button class="btn btn-alt closet-btn" id="closetBtn" type="button">🎨 Colors &amp; Magic<span class="badge" id="newBadge" hidden>NEW!</span></button>
+    <div class="jar">⭐ <span id="jarCount">0</span> stars<span id="jarNext"></span></div>
+  </div>
+</div>
+
+<div id="closet" class="overlay hidden">
+  <div class="card closet-card" role="dialog" aria-labelledby="closetTitle">
+    <h2 id="closetTitle">🦄 My Unicorn</h2>
+    <div class="jar">⭐ <span id="closetJar">0</span> stars collected</div>
+    <h3>🎨 Colors</h3>
     <div class="skins" id="skins"></div>
-    <div class="jar">⭐ <span id="jarCount">0</span> stars collected</div>
+    <h3>✨ Magic</h3>
+    <div class="skins" id="magics"></div>
+    <div class="closet-msg" id="closetMsg"></div>
+    <div class="actions"><button class="btn btn-go" id="closetDone" type="button">👆 Let's fly!</button></div>
   </div>
 </div>
 
@@ -159,7 +193,7 @@
     </div>
     <div class="actions">
       <button class="btn btn-go" id="again" type="button">▶ Fly again!</button>
-      <button class="btn btn-alt" id="toTitle" type="button">🦄 Pick a unicorn</button>
+      <button class="btn btn-alt" id="toTitle" type="button">🎨 Colors &amp; Magic</button>
     </div>
   </div>
 </div>
@@ -180,7 +214,27 @@
     { id: 'lav', name: 'Lavender', need: 30, body: '#dcc8ff', shade: '#b89cf0', mane: ['#7c3aed', '#a77bff', '#4dc3ff', '#a77bff'], horn: '#ffe14d', wing: '#f0e8ff', hoof: '#7c3aed' },
     { id: 'night', name: 'Starlight', need: 60, body: '#3a3f8f', shade: '#272b6b', mane: ['#ffe14d', '#ffffff', '#9be7ff', '#ffffff'], horn: '#ffe14d', wing: '#6d74d8', hoof: '#ffe14d' },
     { id: 'gold', name: 'Sunshine', need: 100, body: '#ffe27a', shade: '#f2c23a', mane: ['#ff7a1a', '#ff5e8a', '#ffffff', '#ff5e8a'], horn: '#ffffff', wing: '#fff6cc', hoof: '#ff7a1a' },
+    { id: 'mint', name: 'Minty', need: 175, body: '#c8f7dc', shade: '#93e0b4', mane: ['#14b86f', '#7be3b0', '#ffffff', '#7be3b0'], horn: '#ffe14d', wing: '#e6fff1', hoof: '#14b86f' },
+    { id: 'ocean', name: 'Ocean', need: 350, body: '#9fe3ff', shade: '#64c3ea', mane: ['#1f6fff', '#4dc3ff', '#ffffff', '#2ee6d6'], horn: '#ffffff', wing: '#dff6ff', hoof: '#1f6fff' },
+    { id: 'candy', name: 'Cotton Candy', need: 600, body: '#ffd6f0', shade: '#a9d8ff', mane: ['#ff7eb6', '#8fd3ff', '#ffffff', '#c8a8ff'], horn: '#ffffff', wing: '#d7ecff', hoof: '#ff7eb6' },
+    { id: 'galaxy', name: 'Galaxy', need: 1000, body: '#2a1450', shade: '#1a0b38', mane: ['#ff5ec8', '#a77bff', '#4dc3ff', '#ffffff'], horn: '#ffffff', wing: '#5b3aa8', hoof: '#ff5ec8', specks: true },
+    { id: 'prism', name: 'Rainbow Dream', need: 1500, body: '#fff0fb', shade: '#ffc9e4', mane: RAINBOW, horn: '#ffffff', wing: '#fff3c4', hoof: '#a77bff', rainbow: true,
+      css: 'linear-gradient(135deg, #ffb3c7, #ffe0a3, #fff6a3, #b8f5c0, #b3e5ff, #d9c2ff)' },
   ];
+  // Magic: a flying effect picked separately from the color. Unlocks keep
+  // coming long after the colors, so the star jar always has a next goal.
+  const MAGIC = [
+    { id: 'none', name: 'Rainbow Trail', emoji: '🌈', need: 0, say: 'A classic rainbow trail' },
+    { id: 'toots', name: 'Glitter Toots', emoji: '💨', need: 125, say: 'Every tap toots rainbow glitter!' },
+    { id: 'sparkle', name: 'Sparkle Trail', emoji: '✨', need: 250, say: 'Sparkles twinkle behind you!' },
+    { id: 'hearts', name: 'Love Hearts', emoji: '💖', need: 450, say: 'Hearts float out behind you!' },
+    { id: 'butterflies', name: 'Butterfly Friends', emoji: '🦋', need: 750, say: 'Butterflies fly along with you!' },
+    { id: 'fireworks', name: 'Fireworks', emoji: '🎆', need: 1250, say: 'Fireworks for every cloud you pass!' },
+    { id: 'party', name: 'Unicorn Party', emoji: '🎉', need: 2000, say: 'ALL the magic at once!' },
+  ];
+  // Every unlock, colors and magic together, in the order they open up
+  const LADDER = [...SKINS.map((r) => ({ ...r, magic: false })), ...MAGIC.map((r) => ({ ...r, magic: true }))]
+    .filter((r) => r.need > 0).sort((a, b) => a.need - b.need);
 
   const $ = (id) => document.getElementById(id);
   const canvas = $('c');
@@ -198,27 +252,38 @@
   resize();
 
   // ================= Saved progress (best score + star jar only) =================
-  let store = { best: 0, stars: 0, skin: 'snow' };
+  let store = { best: 0, stars: 0, skin: 'snow', magic: 'none', seen: 0 };
   try { store = Object.assign(store, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch (e) { /* private mode */ }
   function persist() { try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) { /* ignore */ } }
   const skinById = (id) => SKINS.find((s) => s.id === id) || SKINS[0];
   const unlocked = (s) => store.stars >= s.need;
   let skin = skinById(store.skin);
   if (!unlocked(skin)) skin = SKINS[0];
+  let magic = MAGIC.find((m) => m.id === store.magic) || MAGIC[0];
+  if (!unlocked(magic)) magic = MAGIC[0];
+  const has = (id) => magic.id === id || magic.id === 'party';
 
   // ================= Sound (tiny Web Audio synth) =================
   let actx = null;
+  // Sound is a bonus: if the device refuses it (iOS caps audio contexts, and
+  // can interrupt or close one), the game must carry on silently.
   function audio() {
-    if (!actx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return null;
-      actx = new AC();
-    }
-    if (actx.state === 'suspended') actx.resume();
+    try {
+      if (!actx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        actx = new AC();
+      }
+      if (actx.state !== 'running' && actx.state !== 'closed') {
+        const p = actx.resume();
+        if (p && p.catch) p.catch(() => {});
+      }
+    } catch (e) { /* no sound this time */ }
     return actx;
   }
-  function tone(freq, { at = 0, dur = 0.12, type = 'sine', vol = 0.15, slide = 0 } = {}) {
-    const a = actx; if (!a) return;
+  function tone(freq, opts) { try { playTone(freq, opts); } catch (e) { /* no sound */ } }
+  function playTone(freq, { at = 0, dur = 0.12, type = 'sine', vol = 0.15, slide = 0 } = {}) {
+    const a = actx; if (!a || a.state === 'closed') return;
     const t = a.currentTime + at;
     const o = a.createOscillator(), g = a.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t);
@@ -238,6 +303,8 @@
     cheer: () => [523, 659, 784, 1046].forEach((f, i) => tone(f, { at: i * 0.09, dur: 0.22, type: 'triangle', vol: 0.12 })),
     fanfare: () => [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) => tone(f, { at: i * 0.1, dur: i === 6 ? 0.5 : 0.16, type: 'triangle', vol: 0.13 })),
     tick: () => tone(880, { dur: 0.06, vol: 0.06 }),
+    toot: () => { tone(170 + Math.random() * 50, { dur: 0.16, type: 'square', slide: -70, vol: 0.045 }); tone(1568 + Math.random() * 300, { at: 0.07, dur: 0.1, vol: 0.04 }); },
+    boom: () => { tone(120, { dur: 0.3, type: 'triangle', slide: -60, vol: 0.12 }); [1760, 2093, 2637].forEach((f, i) => tone(f, { at: 0.12 + i * 0.05, dur: 0.12, vol: 0.03 })); },
   };
 
   // ================= Game state =================
@@ -298,11 +365,26 @@
     uni.wing = 1;
     sfx.flap();
     for (let i = 0; i < 4; i++) puff(uni.x - 14, uni.y + 10, '#ffffff', 60);
+    if (has('toots')) toot();
+  }
+
+  let toots = 0;
+  function toot() {
+    toots++;
+    const bx = uni.x - 30, by = uni.y + 4;
+    for (let i = 0; i < 16; i++) {
+      const a = Math.PI + (Math.random() - 0.5) * 1.4, v = 120 + Math.random() * 170;
+      particles.push({ x: bx, y: by, vx: Math.cos(a) * v, vy: Math.sin(a) * v + 30, life: 0.85, max: 0.85, color: RAINBOW[i % 6],
+        size: 2.5 + Math.random() * 3, kind: i % 2 ? 'twinkle' : 'dot', rot: Math.random() * 6, drag: 0.95 });
+    }
+    for (let i = 0; i < 3; i++) particles.push({ x: bx - 4, y: by, vx: -50 - Math.random() * 50, vy: (Math.random() - 0.5) * 30, life: 0.55, max: 0.55, color: '#ffffff', size: 8 + Math.random() * 5, kind: 'dot', drag: 0.95 });
+    sfx.toot();
+    if (Math.random() < 0.3) popText(bx - 16, by - 6, 'toot!', '#ff7eb6', 18);
   }
 
   function action() {
     audio();
-    if (state === 'title') { hide('title'); resetRun(); state = 'play'; flap(); }
+    if (state === 'title') { if (closetOpen()) return; hide('title'); resetRun(); state = 'play'; flap(); }
     else if (state === 'ready') { hide('ready'); state = 'play'; flap(); }
     else if (state === 'play') flap();
     else if (state === 'over' && clock - overAt > 1.2) restart();
@@ -333,15 +415,16 @@
   // arcade freezes performance.now() while paused.
   const onButton = (e) => !!(e.target && e.target.closest && e.target.closest('button'));
   let lastTouch = 0;
+  const inCloset = (e) => !!(e.target && e.target.closest && e.target.closest('#closet'));
   addEventListener('touchstart', (e) => {
-    if (onButton(e)) return;                   // buttons handle themselves
+    if (onButton(e) || inCloset(e)) return;    // buttons handle themselves; the closet scrolls
     if (e.cancelable) e.preventDefault();      // no zoom / long-press menus
     lastTouch = Date.now();
     action();
   }, { passive: false });
   addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'touch' || Date.now() - lastTouch < 800) return;
-    if (onButton(e)) return;
+    if (onButton(e) || inCloset(e)) return;
     if (e.button && e.button !== 0) return;
     e.preventDefault();
     action();
@@ -363,44 +446,78 @@
   addEventListener('contextmenu', (e) => e.preventDefault());
 
   $('again').addEventListener('click', restart);
-  $('toTitle').addEventListener('click', toTitle);
+  $('toTitle').addEventListener('click', () => { if (state === 'over') { toTitle(); openCloset(); } });
+  $('closetBtn').addEventListener('click', () => { audio(); sfx.tick(); openCloset(); });
+  $('closetDone').addEventListener('click', () => { audio(); sfx.tick(); closeCloset(); });
 
   const show = (id) => $(id).classList.remove('hidden');
   const hide = (id) => $(id).classList.add('hidden');
 
-  // ================= Title: unicorn picker =================
-  function renderSkins() {
+  // ================= Title + "Colors & Magic" closet =================
+  const nextUnlock = () => LADDER.find((r) => r.need > store.stars);
+  const topUnlocked = () => LADDER.filter(unlocked).reduce((m, r) => Math.max(m, r.need), 0);
+  function renderTitle() {
     $('jarCount').textContent = store.stars;
-    $('skinName').textContent = skin.name;
-    const box = $('skins');
-    box.innerHTML = '';
-    SKINS.forEach((s) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'skin' + (s === skin ? ' on' : '') + (unlocked(s) ? '' : ' locked');
-      b.style.setProperty('--c', s.body);
-      b.style.setProperty('--m', s.mane[0]);
-      b.setAttribute('aria-label', unlocked(s) ? s.name : `${s.name} (needs ${s.need} stars)`);
-      if (!unlocked(s)) {
-        const n = document.createElement('span');
-        n.className = 'need'; n.textContent = `⭐${s.need}`;
-        b.appendChild(n);
-      }
-      b.addEventListener('click', () => {
-        audio();
-        if (!unlocked(s)) {
-          tone(300, { dur: 0.15, type: 'triangle', vol: 0.1 });
-          $('skinName').textContent = `Collect ${s.need - store.stars} more ⭐ for ${s.name}!`;
-          return;
-        }
-        skin = s; store.skin = s.id; persist();
-        sfx.star();
-        renderSkins();
-      });
-      box.appendChild(b);
-    });
+    const next = nextUnlock();
+    $('jarNext').textContent = next ? ` · ${next.need - store.stars} more for ${next.magic ? next.emoji : '🦄'} ${next.name}` : ' · You have it all! 🌈';
+    $('skinName').textContent = magic.id === 'none' ? skin.name : `${skin.name} + ${magic.emoji} ${magic.name}`;
+    $('newBadge').hidden = topUnlocked() <= (store.seen || 0);
   }
-  renderSkins();
+  const closetOpen = () => !$('closet').classList.contains('hidden');
+  function openCloset() {
+    store.seen = topUnlocked(); persist();
+    renderCloset();
+    const next = nextUnlock();
+    $('closetMsg').textContent = next ? `${next.need - store.stars} more ⭐ to unlock ${next.name}!` : 'You unlocked everything! 🌈';
+    show('closet');
+  }
+  function closeCloset() { hide('closet'); renderTitle(); }
+
+  function swatch(item, isMagic) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    const open = unlocked(item);
+    b.className = 'skin' + (isMagic ? ' magic' : '') + ((isMagic ? item === magic : item === skin) ? ' on' : '') + (open ? '' : ' locked');
+    b.dataset.id = item.id;
+    if (isMagic) {
+      const em = document.createElement('span');
+      em.className = 'em'; em.textContent = item.emoji;
+      b.appendChild(em);
+    } else {
+      b.style.setProperty('--c', item.css || item.body);
+      b.style.setProperty('--m', item.mane[0]);
+    }
+    b.setAttribute('aria-label', open ? item.name : `${item.name} (needs ${item.need} stars)`);
+    if (!open) {
+      const n = document.createElement('span');
+      n.className = 'need'; n.textContent = `⭐${item.need}`;
+      b.appendChild(n);
+    }
+    b.addEventListener('click', () => {
+      audio();
+      if (!open) {
+        tone(300, { dur: 0.15, type: 'triangle', vol: 0.1 });
+        $('closetMsg').textContent = `Collect ${item.need - store.stars} more ⭐ for ${item.name}!`;
+        return;
+      }
+      if (isMagic) { magic = item; store.magic = item.id; } else { skin = item; store.skin = item.id; }
+      persist();
+      sfx.star();
+      if (isMagic && item.id === 'toots') { sfx.toot(); }
+      renderCloset();
+      $('closetMsg').textContent = isMagic ? `${item.emoji} ${item.name}: ${item.say}` : `🦄 ${item.name}!`;
+    });
+    return b;
+  }
+  function renderCloset() {
+    $('closetJar').textContent = store.stars;
+    $('skins').replaceChildren(...SKINS.map((s) => swatch(s, false)));
+    $('magics').replaceChildren(...MAGIC.map((m) => swatch(m, true)));
+    renderTitle();
+  }
+  // Kept for the existing callers below
+  const renderSkins = renderTitle;
+  renderTitle();
 
   // ================= Effects =================
   function puff(x, y, color, spd = 120, size = 5, life = 0.5) {
@@ -421,8 +538,47 @@
       });
     }
   }
-  function popText(x, y, text, color = '#fff') {
-    particles.push({ x, y, vx: 0, vy: -70, life: 0.9, max: 0.9, color, size: 26, kind: 'text', text });
+  function popText(x, y, text, color = '#fff', size = 26) {
+    particles.push({ x, y, vx: 0, vy: -70, life: 0.9, max: 0.9, color, size, kind: 'text', text });
+  }
+  function firework() {
+    const x = uni.x + 90 + Math.random() * Math.max(120, W - uni.x - 170), y = 60 + Math.random() * 190;
+    const c1 = RAINBOW[Math.floor(Math.random() * 6)], c2 = RAINBOW[Math.floor(Math.random() * 6)];
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2, v = 100 + Math.random() * 70;
+      particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1.1, max: 1.1, color: i % 2 ? c1 : c2, size: 3.2, kind: 'dot', drag: 0.97, g: 80 });
+    }
+    particles.push({ x, y, vx: 0, vy: 0, life: 0.25, max: 0.25, color: '#ffffff', size: 16, kind: 'dot' });
+    sfx.boom();
+  }
+
+  // Butterfly friends follow the unicorn around
+  let flock = [];
+  function updateFlock(dt) {
+    if (!has('butterflies') || state === 'over' || state === 'dying') { flock = []; return; }
+    while (flock.length < 3) {
+      const i = flock.length;
+      flock.push({ x: uni.x - 60, y: uni.y, ph: i * 2.1, c: ['#ff7eb6', '#4dc3ff', '#ffd23f'][i] });
+    }
+    flock.forEach((b, i) => {
+      const tx = uni.x - 46 - i * 26 + Math.sin(clock * 2.3 + b.ph) * 10;
+      const ty = uni.y - 18 + i * 14 + Math.sin(clock * 3.1 + b.ph) * 20;
+      b.x += (tx - b.x) * Math.min(1, dt * (4 - i * 0.8));
+      b.y += (ty - b.y) * Math.min(1, dt * (4 - i * 0.8));
+    });
+  }
+  // Sparkles and hearts drift off behind the unicorn while it flies
+  function trailMagic(dt, speed) {
+    if (state === 'over' || state === 'dying') return;
+    if (has('sparkle') && Math.random() < dt * 30) {
+      particles.push({ x: uni.x - 26 + Math.random() * 20, y: uni.y - 12 + Math.random() * 32, vx: -speed * 0.7 + (Math.random() - 0.5) * 30,
+        vy: (Math.random() - 0.5) * 30, life: 0.9, max: 0.9, color: Math.random() < 0.5 ? '#ffffff' : RAINBOW[Math.floor(Math.random() * 6)],
+        size: 3.5 + Math.random() * 3.5, kind: 'twinkle', rot: Math.random() * 6 });
+    }
+    if (has('hearts') && Math.random() < dt * 5) {
+      particles.push({ x: uni.x - 32, y: uni.y + (Math.random() - 0.5) * 16, vx: -speed * 0.55, vy: -25 - Math.random() * 20,
+        life: 1.4, max: 1.4, color: ['#ff4f9a', '#ff86c2', '#ff5e8a'][Math.floor(Math.random() * 3)], size: 7 + Math.random() * 4, kind: 'heart' });
+    }
   }
   const CHEERS = ['Super!', 'Awesome!', 'Magical!', 'Amazing!', 'Wow!', 'Fantastic!', 'Unstoppable!', 'Sparkly!'];
   function banner(text) { banners.push({ text, t: 0 }); }
@@ -440,6 +596,8 @@
     skyPhase += (target - skyPhase) * Math.min(1, dt * 1.5);
 
     uni.wing = Math.max(0, uni.wing - dt * 4);
+    trailMagic(dt, speed);
+    updateFlock(dt);
 
     if (state === 'title' || state === 'ready') {
       uni.x += (unicornX() - uni.x) * Math.min(1, dt * 5);
@@ -468,6 +626,7 @@
         if (!p.passed && p.x + PILLAR_W < uni.x) {
           p.passed = true; score++;
           sfx.point();
+          if (has('fireworks')) firework();
           popText(uni.x, uni.y - 40, '+1');
           if (score >= nextMilestone) {
             nextMilestone += 10;
@@ -482,6 +641,8 @@
         if (!s.got && Math.hypot(s.x - uni.x, s.y - uni.y) < 34) {
           s.got = true; s.t = 0; runStars++; store.stars++;
           sfx.star();
+          const prize = LADDER.find((r) => r.need === store.stars);
+          if (prize) { banner(prize.magic ? `${prize.emoji} New magic!` : '🦄 New color!'); sfx.cheer(); sparkle(uni.x, uni.y, 24); }
           sparkle(s.x, s.y, 10);
           popText(s.x, s.y - 28, '⭐', '#ffe14d');
         }
@@ -514,7 +675,9 @@
     for (const pt of particles) {
       pt.life -= dt;
       pt.x += pt.vx * dt; pt.y += pt.vy * dt;
-      if (pt.kind === 'dot' || pt.kind === 'star') { pt.vx *= 0.94; pt.vy *= 0.94; }
+      if (pt.drag) { pt.vx *= pt.drag; pt.vy *= pt.drag; }
+      else if (pt.kind === 'dot' || pt.kind === 'star') { pt.vx *= 0.94; pt.vy *= 0.94; }
+      if (pt.g) pt.vy += pt.g * dt;
       if (pt.kind === 'confetti') { pt.rot += pt.spin * dt; pt.vx += Math.sin(clock * 3 + pt.y * 0.02) * 4; }
     }
     particles = particles.filter((pt) => pt.life > 0);
@@ -567,12 +730,13 @@
       score < 40 ? 'Amazing!' : 'Unicorn legend!';
     $('runStars').textContent = runStars ? `You caught ${runStars} ⭐` : 'Fly through the ⭐ to catch them!';
 
-    const newly = SKINS.filter((s) => s.need > starsBefore && s.need <= store.stars);
-    const next = SKINS.find((s) => s.need > store.stars);
+    const newly = LADDER.filter((r) => r.need > starsBefore && r.need <= store.stars);
+    const next = nextUnlock();
     const um = $('unlockMsg');
     um.classList.toggle('yay', newly.length > 0);
-    um.textContent = newly.length ? `🎉 You unlocked ${newly[newly.length - 1].name}!` :
-      next ? `${next.need - store.stars} more ⭐ to unlock ${next.name}` : 'You unlocked every unicorn! 🌈';
+    const got = newly[newly.length - 1];
+    um.textContent = got ? `🎉 You unlocked ${got.magic ? got.emoji + ' ' : ''}${got.name}! Try it in Colors & Magic.` :
+      next ? `${next.need - store.stars} more ⭐ to unlock ${next.magic ? next.emoji + ' ' : ''}${next.name}` : 'You unlocked everything! 🌈';
 
     const over = $('over');
     over.classList.remove('armed');
@@ -664,6 +828,7 @@
     for (const s of stars) drawStar(s);
     drawTrail();
     drawUnicorn(uni.x, uni.y, uni.rot, uni.wing, skin, state === 'dying' || state === 'over');
+    for (const b of flock) drawButterfly(b);
     drawParticles();
     hud();
 
@@ -792,6 +957,15 @@
     ctx.globalAlpha = 1;
   }
 
+  let rbGrad = null;
+  function rainbowFill() {
+    if (!rbGrad) {
+      rbGrad = ctx.createLinearGradient(-24, -40, 40, 16);
+      ['#ffb3c7', '#ffe0a3', '#fff6a3', '#b8f5c0', '#b3e5ff', '#d9c2ff'].forEach((c, i) => rbGrad.addColorStop(i / 5, c));
+    }
+    return rbGrad;
+  }
+
   function drawUnicorn(x, y, rot, wing, s, dizzy) {
     ctx.save();
     ctx.translate(x, y);
@@ -825,7 +999,7 @@
     }
 
     // Body
-    ctx.fillStyle = s.body;
+    ctx.fillStyle = s.rainbow ? rainbowFill() : s.body;
     ctx.beginPath(); ctx.ellipse(0, 0, 23, 15, 0, 0, 7); ctx.fill(); ctx.stroke();
     // Neck
     ctx.beginPath(); ctx.moveTo(10, -9); ctx.quadraticCurveTo(18, -20, 22, -24); ctx.lineTo(30, -16); ctx.quadraticCurveTo(24, -6, 20, 4); ctx.closePath(); ctx.fill();
@@ -834,6 +1008,14 @@
     ctx.beginPath(); ctx.ellipse(35, -16, 7.5, 6.5, -0.2, 0, 7); ctx.fill(); ctx.stroke();
     // Ear
     ctx.beginPath(); ctx.moveTo(20, -29); ctx.lineTo(22, -38); ctx.lineTo(26, -30); ctx.closePath(); ctx.fill(); ctx.stroke();
+    if (s.specks) {   // Galaxy: twinkly stars on the coat
+      for (const [sx, sy, r] of [[-12, -4, 1.6], [-3, 5, 1.2], [6, -6, 1.8], [13, 4, 1.1], [-16, 6, 1.1], [24, -20, 1.2], [2, -1, 0.9]]) {
+        ctx.globalAlpha = 0.55 + 0.45 * Math.sin(clock * 4 + sx);
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(sx, sy, r, 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
     // Horn
     ctx.fillStyle = s.horn;
     ctx.beginPath(); ctx.moveTo(25, -30); ctx.lineTo(36, -49); ctx.lineTo(31, -28); ctx.closePath(); ctx.fill(); ctx.stroke();
@@ -898,6 +1080,8 @@
       ctx.fillStyle = p.color;
       if (p.kind === 'dot') { ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.fill(); }
       else if (p.kind === 'star') { starPath(p.x, p.y, p.size, p.rot); ctx.fill(); }
+      else if (p.kind === 'twinkle') { starPath(p.x, p.y, p.size * (0.55 + 0.45 * Math.abs(Math.sin(p.life * 14))), p.rot); ctx.fill(); }
+      else if (p.kind === 'heart') { heartPath(p.x, p.y, p.size); ctx.fill(); }
       else if (p.kind === 'confetti') {
         ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2); ctx.restore();
       } else if (p.kind === 'text') {
@@ -905,6 +1089,28 @@
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  function heartPath(x, y, s) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + s * 0.4);
+    ctx.bezierCurveTo(x - s * 1.15, y - s * 0.3, x - s * 0.5, y - s * 1.1, x, y - s * 0.45);
+    ctx.bezierCurveTo(x + s * 0.5, y - s * 1.1, x + s * 1.15, y - s * 0.3, x, y + s * 0.4);
+    ctx.closePath();
+  }
+  function drawButterfly(b) {
+    const f = 0.25 + 0.75 * Math.abs(Math.sin(clock * 15 + b.ph));
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(Math.sin(clock * 3 + b.ph) * 0.3);
+    ctx.fillStyle = b.c; ctx.strokeStyle = 'rgba(60,25,110,.5)'; ctx.lineWidth = 1;
+    for (const sd of [-1, 1]) {
+      ctx.beginPath(); ctx.ellipse(sd * 5 * f, -3, 6 * f + 0.5, 7, sd * 0.5, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(sd * 4 * f, 4, 4 * f + 0.5, 4.5, -sd * 0.4, 0, 7); ctx.fill(); ctx.stroke();
+    }
+    ctx.fillStyle = '#3b1d6e';
+    ctx.beginPath(); ctx.ellipse(0, 0, 1.6, 7, 0, 0, 7); ctx.fill();
+    ctx.restore();
   }
 
   function outlined(text, x, y, size, fill = '#fff', align = 'center') {
@@ -937,19 +1143,27 @@
 
   // ================= Loop =================
   let last = 0;
+  let frames = 0;
   function frame(ts) {
+    // Ask for the next frame first and contain any error, so one bad frame
+    // can never stop the game for good.
+    requestAnimationFrame(frame);
+    frames++;
     const dt = last ? Math.min(0.05, Math.max(0, (ts - last) / 1000)) : 0.016;
     last = ts;
-    update(dt);
-    if (state === 'over' && clock >= armAt) { $('over').classList.add('armed'); armAt = Infinity; }
-    draw();
-    requestAnimationFrame(frame);
+    try {
+      update(dt);
+      if (state === 'over' && clock >= armAt) { $('over').classList.add('armed'); armAt = Infinity; }
+      draw();
+    } catch (e) { console.warn('[flight] frame error', e); }
   }
   uni.x = unicornX();
   requestAnimationFrame(frame);
 
   // Tiny hook for automated tests
-  window.__fotu = { get state() { return state; }, get score() { return score; }, get flaps() { return flaps; } };
+  window.__fotu = { get state() { return state; }, get score() { return score; }, get flaps() { return flaps; }, get frames() { return frames; },
+    get magic() { return magic.id; }, get toots() { return toots; }, get jar() { return store.stars; },
+    _stars(n) { store.stars = n; persist(); renderTitle(); if (closetOpen()) renderCloset(); } };
 })();
 </script>
 </body>

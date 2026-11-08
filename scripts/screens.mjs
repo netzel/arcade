@@ -178,11 +178,36 @@ async function unicornPass(browser, vp) {
   // Real finger taps on phone/iPad sizes, mouse clicks on desktop
   const tap = (x, y) => (vp.mobile ? page.touchscreen.tap(x, y) : page.mouse.click(x, y));
   const tapEl = async (loc) => { const b = await loc.boundingBox(); await tap(b.x + b.width / 2, b.y + b.height / 2); };
-  const fotu = () => g().evaluate(() => ({ state: window.__fotu.state, flaps: window.__fotu.flaps }));
+  const fotu = () => g().evaluate(() => ({ state: window.__fotu.state, flaps: window.__fotu.flaps, toots: window.__fotu.toots, magic: window.__fotu.magic }));
+
+  // Colors & Magic closet: with a big star jar, pick Glitter Toots
+  await g().evaluate(() => window.__fotu._stars(1300));
+  check(await t.frame().locator('#newBadge').isVisible(), 'flight: a NEW! badge shows when something is unlocked');
+  await tapEl(t.frame().locator('#closetBtn'));
+  await page.waitForTimeout(500);
+  await t.shot('12b-fotu-closet');
+  const closet = await g().evaluate(() => {
+    const r = document.querySelector('#closet .card').getBoundingClientRect();
+    return { ok: r.top >= -1 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1, h: Math.round(r.height), vh: innerHeight,
+      colors: document.querySelectorAll('#skins .skin').length, magic: document.querySelectorAll('#magics .skin').length,
+      locked: document.querySelectorAll('#closet .skin.locked').length };
+  });
+  check(closet.ok, `flight: closet fits on screen (${closet.h}px in ${closet.vh}px)`);
+  check(closet.colors === 10 && closet.magic === 7 && closet.locked === 2, `flight: closet shows 10 colors + 7 magic, 2 still locked at 1300 stars (${closet.colors}/${closet.magic}/${closet.locked})`);
+  await t.frame().locator('#magics .skin[data-id="toots"]').scrollIntoViewIfNeeded();
+  await tapEl(t.frame().locator('#magics .skin[data-id="toots"]'));
+  await page.waitForTimeout(200);
+  check((await fotu()).magic === 'toots', 'flight: picking Glitter Toots selects it');
+  check((await fotu()).state === 'title', 'flight: tapping in the closet does not start the game');
+  await tapEl(t.frame().locator('#closetDone'));
+  await page.waitForTimeout(500);
+  check(!(await t.frame().locator('#newBadge').isVisible()), 'flight: NEW! badge clears after visiting the closet');
+
   await tap(vp.width / 2, vp.height * 0.4);
   await page.waitForTimeout(100);
   let s = await fotu();
   check(s.state === 'play' && s.flaps === 1, `flight: one ${vp.mobile ? 'tap' : 'click'} starts the game with exactly one flap (${s.state}, ${s.flaps} flaps)`);
+  check(s.toots === 1, `flight: Glitter Toots toots once per tap (${s.toots})`);
   // Keep flapping for a bit so there is something to see
   let live = 1;
   for (let i = 0; i < 8; i++) {
@@ -420,13 +445,89 @@ async function savesPass(browser, vp) {
   await t.ctx.close();
 }
 
+// iPhones and iPads sometimes refuse sound: Safari caps how many audio
+// contexts a page may hold, and an interrupted/closed context can throw when
+// a game makes a sound. A sound failure must never stop taps or the game loop.
+const BREAK_AUDIO = (mode) => {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  if (mode === 'ctor') {
+    const Broken = function () { throw new Error('test: too many AudioContexts'); };
+    window.AudioContext = Broken; window.webkitAudioContext = Broken;
+  } else {
+    for (const m of ['createOscillator', 'createGain', 'createBufferSource', 'createBiquadFilter']) {
+      AC.prototype[m] = function () { throw new Error('test: audio context is closed'); };
+    }
+  }
+};
+
+async function brokenAudioPass(browser, vp, mode) {
+  const t = await openContext(browser, vp);
+  await t.ctx.addInitScript(BREAK_AUDIO, mode);
+  const { page } = t;
+  const tap = (x, y) => (vp.mobile ? page.touchscreen.tap(x, y) : page.mouse.click(x, y));
+  const tapEl = async (loc) => { const b = await loc.boundingBox(); await tap(b.x + b.width / 2, b.y + b.height / 2); };
+  await t.home();
+
+  await t.launch(2);
+  const fotu = () => t.gameFrame().evaluate(() => ({ state: window.__fotu.state, flaps: window.__fotu.flaps, frames: window.__fotu.frames }));
+  await tap(vp.width / 2, vp.height * 0.4);
+  await page.waitForTimeout(150);
+  await tap(vp.width / 2, vp.height * 0.4);
+  await page.waitForTimeout(150);
+  let s = await fotu();
+  check(s.state === 'play' && s.flaps === 2, `no-sound(${mode}) flight: taps still start and flap (${s.state}, ${s.flaps} flaps)`);
+  const f0 = s.frames;
+  await page.waitForTimeout(500);
+  s = await fotu();
+  check(s.frames > f0, `no-sound(${mode}) flight: game keeps animating (${f0} -> ${s.frames} frames)`);
+
+  await page.goto(BASE + '/');
+  await page.locator('#home').waitFor();
+  await t.launch(3);
+  const mz = () => t.gameFrame().evaluate(() => ({ state: window.__maze.state, uni: window.__maze.uni, frames: window.__maze.frames }));
+  await tapEl(t.frame().locator('#play'));
+  await page.waitForTimeout(300);
+  let m = await mz();
+  check(m.state === 'play', `no-sound(${mode}) maze: Play starts the game (${m.state})`);
+  await tap(vp.width * 0.97, vp.height * 0.08);
+  await page.waitForTimeout(700);
+  await tap(vp.width * 0.03, vp.height * 0.97);
+  await page.waitForTimeout(700);
+  const m2 = await mz();
+  check(m2.uni.x !== m.uni.x || m2.uni.y !== m.uni.y, `no-sound(${mode}) maze: taps still move the unicorn`);
+  check(m2.frames > m.frames, `no-sound(${mode}) maze: game keeps animating (${m.frames} -> ${m2.frames} frames)`);
+  check(t.errors.length === 0, `no-sound(${mode}): no uncaught errors${t.errors.length ? ': ' + [...new Set(t.errors)].slice(0, 3).join(' | ') : ''}`);
+  await t.ctx.close();
+}
+
+// Opening and closing the menu very quickly must never leave the game frozen.
+async function pauseRacePass(browser, vp) {
+  const t = await openContext(browser, vp);
+  const { page } = t;
+  await t.home();
+  await t.launch(2);
+  const stuck = await t.gameFrame().evaluate(async () => {
+    window.ArcadeBridge.pause();
+    window.ArcadeBridge.resume();
+    await new Promise((r) => setTimeout(r, 400));
+    return window.ArcadeBridge.isPaused();
+  });
+  check(!stuck, 'bridge: a pause cancelled within the same frame does not freeze the game');
+  await t.ctx.close();
+}
+
 await fs.mkdir(OUT, { recursive: true });
 const server = spawn(process.execPath, [path.join(ROOT, 'scripts/serve.mjs')], { env: { ...process.env, PORT: String(PORT) }, stdio: 'ignore' });
 await new Promise((r) => setTimeout(r, 600));
 const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'chrome', args: ['--use-gl=angle', '--enable-unsafe-swiftshader'] });
 
 try {
-  for (const vp of VIEWPORTS) {
+  console.log('\n▶ robustness');
+  await pauseRacePass(browser, VIEWPORTS[0]);
+  await brokenAudioPass(browser, VIEWPORTS[0], 'ctor');
+  await brokenAudioPass(browser, VIEWPORTS[3], 'nodes');
+  for (const vp of process.env.ONLY_ROBUST ? [] : VIEWPORTS) {
     console.log(`\n▶ ${vp.name} (${vp.width}x${vp.height})`);
     await freshPass(browser, vp);
     console.log('  ↳ Flight of the Unicorn');

@@ -675,14 +675,20 @@
   var audioCtx = null, masterGain = null, muted = false, padNodes = null;
   function initAudio(){
     if (audioCtx) return;
-    var AC = window.AudioContext || window.webkitAudioContext;
-    audioCtx = new AC();
-    masterGain = audioCtx.createGain();
-    masterGain.gain.value = 0.5;
-    masterGain.connect(audioCtx.destination);
-    startAmbientPad();
+    // Sound is a bonus: if the device refuses it, play on silently.
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0.5;
+      masterGain.connect(audioCtx.destination);
+      startAmbientPad();
+    } catch (e) { audioCtx = null; }
   }
   function playTone(freq, startDelay, duration, type, peakGain){
+    try { playToneRaw(freq, startDelay, duration, type, peakGain); } catch (e) { /* no sound */ }
+  }
+  function playToneRaw(freq, startDelay, duration, type, peakGain){
     if (!audioCtx) return;
     var osc = audioCtx.createOscillator();
     var gain = audioCtx.createGain();
@@ -782,7 +788,7 @@
   var started = false;
   document.getElementById('playBtn').addEventListener('click', function(){
     initAudio();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    try { if (audioCtx && audioCtx.state !== 'running') audioCtx.resume(); } catch (e) { /* no sound */ }
     document.getElementById('titleScreen').classList.add('hidden');
     document.getElementById('hud').classList.add('visible');
     started = true;

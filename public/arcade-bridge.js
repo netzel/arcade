@@ -105,6 +105,18 @@
     window[name] = Wrapped;
   });
 
+  // Close this page's audio when the arcade swaps games. iPhones/iPads only
+  // allow a handful of live audio contexts; leftovers from earlier games can
+  // make the next game's sound (and, in unguarded games, its taps) fail
+  // until the browser is reloaded.
+  window.addEventListener('pagehide', function (e) {
+    if (e.persisted) return; // kept for back/forward: it may come back
+    contexts.forEach(function (ctx) {
+      try { if (ctx.state !== 'closed') ctx.close(); } catch (err) { /* ignore */ }
+    });
+    contexts = [];
+  });
+
   var pausedMedia = [];
   function applyAudio() {
     var off = silenced();
@@ -156,8 +168,12 @@
 
   // ── Pause / resume ───────────────────────────────────────────────────
   var pauseTimer = null;
+  var pausePending = false; // a pause was asked for and not cancelled yet
   function finishPause() {
-    if (paused) return;
+    // resume() may arrive before the deferred frame/timer below fires; a
+    // cancelled pause must not freeze the game later with no menu showing.
+    if (paused || !pausePending) return;
+    pausePending = false;
     clearTimeout(pauseTimer);
     lastThumb = capture() || lastThumb;
     paused = true;
@@ -171,6 +187,7 @@
   }
   function pause() {
     if (paused) return;
+    pausePending = true;
     if (document.hidden) { finishPause(); return; }
     // Let the game draw one more frame, then grab it for the thumbnail
     // inside the same frame (WebGL buffers are only readable then).
@@ -180,6 +197,7 @@
   }
   function resume() {
     clearTimeout(pauseTimer);
+    pausePending = false;
     if (!paused) return;
     pausedTotal += realNow() - pausedAt;
     pausedAt = null;
