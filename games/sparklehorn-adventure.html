@@ -248,6 +248,55 @@
 
   SPK.HOME_FIRE = 'meadow:F:12,18';
 
+  // ── Combat ───────────────────────────────────────────────────────────
+  // speed/sense in tiles(/s); touch and dmg in half-hearts.
+  SPK.ENEMIES = {
+    slime:     { hp: 2, speed: 1.2, sense: 5, touch: 1 },
+    slimeBig:  { hp: 4, speed: 1.0, sense: 5, touch: 1, splitInto: 'slimeMini', splitN: 2 },
+    slimeMini: { hp: 1, speed: 1.6, sense: 5, touch: 1 },
+    mushroom:  { hp: 3, speed: 0.8, sense: 6, touch: 1, spore: { every: 2.2, windup: 0.6, speed: 2.5, dmg: 1 } },
+  };
+
+  function angleDiff(a, b) { var d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; }
+  SPK.angleDiff = angleDiff;
+
+  SPK.pickTarget = function (px, py, facing, enemies, rangePx, coneDeg) {
+    var best = null, bestD = Infinity, half = coneDeg * Math.PI / 360;
+    for (var i = 0; i < enemies.length; i++) {
+      var e = enemies[i];
+      if (!(e.hp > 0)) continue;
+      var dx = e.x - px, dy = e.y - py, d = Math.hypot(dx, dy);
+      if (d > rangePx || d >= bestD) continue;
+      if (d > 1 && Math.abs(angleDiff(Math.atan2(dy, dx), facing)) > half) continue;
+      best = e; bestD = d;
+    }
+    return best;
+  };
+
+  SPK.fanAngles = function (base, n, spreadDeg) {
+    if (n <= 1) return [base];
+    var out = [], step = spreadDeg * Math.PI / 180 / (n - 1), start = base - spreadDeg * Math.PI / 360;
+    for (var i = 0; i < n; i++) out.push(start + step * i);
+    return out;
+  };
+
+  SPK.damageEnemy = function (e, n) {
+    e.hp -= n;
+    if (e.hp > 0) return { popped: false, spawn: [] };
+    var def = SPK.ENEMIES[e.kind], spawn = [];
+    if (def && def.splitInto) {
+      for (var i = 0; i < def.splitN; i++) {
+        var a = (i / def.splitN) * Math.PI * 2;
+        spawn.push({ kind: def.splitInto, x: e.x + Math.cos(a) * SPK.TILE * 0.5, y: e.y + Math.sin(a) * SPK.TILE * 0.5 });
+      }
+    }
+    return { popped: true, spawn: spawn };
+  };
+
+  SPK.enemyHit = function (state, raw) {
+    return Math.max(1, Math.min(raw, SPK.DIFF[state.difficulty].maxHit));
+  };
+
   SPK.createGame = function (difficulty) {
     var d = SPK.DIFF[difficulty];
     if (!d) throw new Error('unknown difficulty: ' + difficulty);
@@ -473,12 +522,15 @@
     map = SPK.parseMap(id);
     chunks = {};
     if (!state.explored[id]) state.explored[id] = new Uint8Array(map.w * map.h);
+    bolts = []; pickups = []; parts = []; horn.dash = null;
+    spawnGroups(state.x, state.y);
   }
   function collideCtx() { return { broken: state.broken, powers: state.powers }; }
   function tileUnder(x, y) { return SPK.tileAt(map, Math.floor(x / TILE), Math.floor(y / TILE)); }
   function teleport(mapId, tx, ty) {
-    state.map = mapId; loadMap(mapId);
+    state.map = mapId;
     state.x = (tx + 0.5) * TILE; state.y = (ty + 0.5) * TILE;
+    loadMap(mapId);
     walkTo = null; doorArmed = false;
     snapCamera();
   }
@@ -495,6 +547,219 @@
       if (x >= 0 && y >= 0 && x < map.w && y < map.h && (x - cx) * (x - cx) + (y - cy) * (y - cy) <= R * R) ex[y * map.w + x] = 1;
     }
   }
+
+  // ── Enemies, bolts, particles, pickups ───────────────────────────────
+  var enemies = [], bolts = [], spores = [], parts = [], pickups = [];
+  var fires = [];             // campfire tile centres on this map (enemy no-go rings)
+  var horn = { cd: 0, dash: null }, magicCd = 0, autoCd = 0;
+  var hitPause = 0, shake = 0;
+  var ACTIVE_R = 14 * TILE, MAX_ACTIVE = 25;
+
+  function spawnEnemy(kind, x, y, group) {
+    var def = SPK.ENEMIES[kind];
+    var e = { kind: kind, x: x, y: y, hp: def.hp, group: group || null, t: Math.random() * 2, hopT: 0.4 + Math.random(),
+              vx: 0, vy: 0, squish: 0, flash: 0, cd: 1 + Math.random() * def.speed, windup: 0, hue: Math.floor(Math.random() * 3) };
+    enemies.push(e);
+    return e;
+  }
+  function spawnGroups(avoidX, avoidY) {
+    enemies = []; spores = [];
+    fires = map.entities.filter(function (e) { return e.kind === 'F'; }).map(function (e) { return { x: (e.tx + 0.5) * TILE, y: (e.ty + 0.5) * TILE }; });
+    map.entities.forEach(function (g, gi) {
+      if (g.kind !== 'S' && g.kind !== 'M') return;
+      var cx = (g.tx + 0.5) * TILE, cy = (g.ty + 0.5) * TILE;
+      if (Math.hypot(cx - avoidX, cy - avoidY) < 5 * TILE) return; // never pop up right next to you
+      var list = g.kind === 'S'
+        ? (gi % 3 === 0 ? ['slimeBig', 'slime', 'slime'] : ['slime', 'slime', 'slime', 'slime'].slice(0, 2 + gi % 3))
+        : ['mushroom', 'mushroom', 'slime'];
+      list.forEach(function (kind, i) {
+        var a = i * 2.4, rr = i ? TILE * 0.9 : 0;
+        var x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+        if (SPK.isSolid(map, Math.floor(x / TILE), Math.floor(y / TILE), collideCtx())) { x = cx; y = cy; }
+        spawnEnemy(kind, x, y, g.id);
+      });
+    });
+  }
+  function nearFire(x, y) {
+    for (var i = 0; i < fires.length; i++) if (Math.hypot(fires[i].x - x, fires[i].y - y) < 3 * TILE) return true;
+    return false;
+  }
+  function burst(x, y, n, colors, speed) {
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2, s = (0.4 + Math.random()) * (speed || 90);
+      parts.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 30, life: 0.5 + Math.random() * 0.4, t: 0,
+                   c: colors[i % colors.length], r: 2 + Math.random() * 2.5 });
+    }
+  }
+  function popEnemy(e) {
+    var r = SPK.damageEnemy(e, 0); // already at 0 hp: work out splits
+    stats.pops++;
+    burst(e.x, e.y, 18, ['#f9a8d4', '#fde047', '#a5f3fc', '#c4b5fd', '#ffffff']);
+    hitPause = Math.max(hitPause, 0.04); shake = Math.max(shake, 0.12);
+    sfx('pop');
+    r.spawn.forEach(function (s) { spawnEnemy(s.kind, s.x, s.y, e.group); });
+    if (Math.random() < 0.30) for (var i = 0, n = 1 + Math.floor(Math.random() * 3); i < n; i++) dropPickup('gem', e.x, e.y);
+    if (Math.random() < 0.12) dropPickup('heart', e.x, e.y);
+    onEnemyPopped(e);
+  }
+  function hurtEnemy(e, n) {
+    if (e.hp <= 0) return;
+    e.hp -= n; e.flash = 0.15;
+    if (e.hp <= 0) popEnemy(e); else sfx('bonk');
+  }
+  function dropPickup(kind, x, y) {
+    var a = Math.random() * Math.PI * 2;
+    pickups.push({ kind: kind, x: x, y: y, vx: Math.cos(a) * 60, vy: Math.sin(a) * 60, z: 0, vz: 120, t: 0 });
+  }
+
+  function updateEnemies(dt) {
+    var d = SPK.DIFF[state.difficulty], active = 0;
+    for (var i = 0; i < enemies.length; i++) {
+      var e = enemies[i];
+      if (e.hp <= 0) continue;
+      var dx = state.x - e.x, dy = state.y - e.y, dist = Math.hypot(dx, dy);
+      if (dist > ACTIVE_R || active >= MAX_ACTIVE) continue;
+      active++;
+      var def = SPK.ENEMIES[e.kind], senses = dist < def.sense * TILE;
+      e.t += dt; e.flash = Math.max(0, e.flash - dt); e.squish = Math.max(0, e.squish - dt * 3);
+      if (e.kind === 'mushroom') {
+        if (e.windup > 0) {
+          e.windup -= dt; e.squish = 0.6;
+          if (e.windup <= 0) {
+            var a = Math.atan2(dy, dx), sp = def.spore.speed * TILE;
+            spores.push({ x: e.x, y: e.y - 4, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 3, dmg: def.spore.dmg });
+            e.cd = def.spore.every / d.enemyAtk;
+          }
+          continue;
+        }
+        e.cd -= dt;
+        if (senses && e.cd <= 0) { e.windup = def.spore.windup; continue; }
+      }
+      // slimes hop; mushrooms shuffle
+      e.hopT -= dt;
+      if (e.hopT <= 0) {
+        var ang = senses ? Math.atan2(dy, dx) : Math.random() * Math.PI * 2;
+        var spd = def.speed * TILE * d.enemySpeed * (senses ? 1 : 0.5);
+        e.vx = Math.cos(ang) * spd; e.vy = Math.sin(ang) * spd;
+        e.hopT = e.kind === 'mushroom' ? 1.2 : 0.55 + Math.random() * 0.5;
+        e.hop = e.kind === 'mushroom' ? 1.0 : 0.35;
+        e.squish = 0.5;
+      }
+      if (e.hop > 0) {
+        e.hop -= dt;
+        var nx = e.x + e.vx * dt, ny = e.y + e.vy * dt;
+        if (nearFire(nx, ny) && !nearFire(e.x, e.y)) { e.hop = 0; }
+        else {
+          var res = SPK.moveAndSlide(map, { x: e.x, y: e.y, r: TILE * 0.28 }, e.vx * dt, e.vy * dt, collideCtx());
+          e.x = res.x; e.y = res.y;
+        }
+      }
+      // touch damage
+      if (dist < TILE * 0.62) playerHit(SPK.enemyHit(state, def.touch), e.x, e.y);
+    }
+    enemies = enemies.filter(function (e) { return e.hp > 0; });
+    for (var s = spores.length - 1; s >= 0; s--) {
+      var p = spores[s];
+      p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.life <= 0 || SPK.isSolid(map, Math.floor(p.x / TILE), Math.floor(p.y / TILE), collideCtx())) { spores.splice(s, 1); continue; }
+      if (Math.hypot(p.x - state.x, p.y - state.y) < TILE * 0.45) { spores.splice(s, 1); playerHit(SPK.enemyHit(state, p.dmg), p.x, p.y); }
+    }
+  }
+
+  function aimAngle() {
+    var tgt = SPK.pickTarget(state.x, state.y, state.facing, enemies, 7 * TILE, 120);
+    return tgt ? Math.atan2(tgt.y - state.y, tgt.x - state.x) : state.facing;
+  }
+  function fireMagic() {
+    var angles = SPK.fanAngles(aimAngle(), 1, 50);
+    angles.forEach(function (a) {
+      bolts.push({ x: state.x + Math.cos(a) * 10, y: state.y + Math.sin(a) * 10, vx: Math.cos(a) * 9 * TILE, vy: Math.sin(a) * 9 * TILE, life: 0.9, dmg: 1 });
+    });
+    stats.bolts++;
+    sfx('sparkle');
+  }
+  function updateMagic(dt) {
+    var d = SPK.DIFF[state.difficulty];
+    magicCd -= dt; autoCd -= dt;
+    var press = pressed('magic');
+    if (press || (holding('magic') && magicCd <= 0)) { fireMagic(); magicCd = 0.33; }
+    else if (d.autoMagic && autoCd <= 0 && SPK.pickTarget(state.x, state.y, state.facing, enemies, 7 * TILE, 360)) {
+      // Easy: sparkle magic fires on its own at whatever is near
+      var keep = state.facing, tgt = SPK.pickTarget(state.x, state.y, state.facing, enemies, 7 * TILE, 360);
+      state.facing = Math.atan2(tgt.y - state.y, tgt.x - state.x);
+      fireMagic();
+      state.facing = keep;
+      autoCd = d.autoMagicEvery;
+    }
+    for (var i = bolts.length - 1; i >= 0; i--) {
+      var b = bolts[i];
+      b.life -= dt; b.x += b.vx * dt; b.y += b.vy * dt;
+      if (b.life <= 0 || SPK.isSolid(map, Math.floor(b.x / TILE), Math.floor(b.y / TILE), collideCtx())) {
+        burst(b.x, b.y, 4, ['#fef08a', '#ffffff'], 40); bolts.splice(i, 1); continue;
+      }
+      for (var j = 0; j < enemies.length; j++) {
+        var e = enemies[j];
+        if (e.hp > 0 && Math.hypot(e.x - b.x, e.y - b.y) < TILE * 0.5) { hurtEnemy(e, b.dmg); bolts.splice(i, 1); break; }
+      }
+    }
+  }
+  function updateHorn(dt) {
+    horn.cd -= dt;
+    if (pressed('horn') && horn.cd <= 0 && !horn.dash) {
+      horn.dash = { t: 0, dur: 0.18, dir: state.facing, hit: [] };
+      horn.cd = 0.5;
+      sfx('whoosh');
+    }
+    if (!horn.dash) return;
+    var h = horn.dash, step = (2.5 * TILE / h.dur) * dt;
+    h.t += dt;
+    var res = SPK.moveAndSlide(map, { x: state.x, y: state.y, r: BODY_R }, Math.cos(h.dir) * step, Math.sin(h.dir) * step, collideCtx());
+    state.x = res.x; state.y = res.y;
+    onHornContact(res.hit);
+    burst(state.x, state.y, 1, ['#f0abfc', '#ffffff'], 20);
+    var dmg = state.powers.mighty ? 2 : 1;
+    for (var i = 0; i < enemies.length; i++) {
+      var e = enemies[i];
+      if (e.hp > 0 && h.hit.indexOf(e) < 0 && Math.hypot(e.x - state.x, e.y - state.y) < TILE * 0.8) { h.hit.push(e); hurtEnemy(e, dmg); }
+    }
+    if (h.t >= h.dur) horn.dash = null;
+  }
+  function updatePickups(dt) {
+    for (var i = pickups.length - 1; i >= 0; i--) {
+      var p = pickups[i];
+      p.t += dt;
+      if (p.z > 0 || p.vz > 0) { p.vz -= 400 * dt; p.z = Math.max(0, p.z + p.vz * dt); p.x += p.vx * dt; p.y += p.vy * dt; if (p.z === 0) { p.vz = 0; p.vx = p.vy = 0; } }
+      var d = Math.hypot(p.x - state.x, p.y - state.y);
+      if (p.t > 0.35 && d < TILE * 1.4) { p.x += (state.x - p.x) * Math.min(1, dt * 10); p.y += (state.y - p.y) * Math.min(1, dt * 10); }
+      if (p.t > 0.35 && d < TILE * 0.45) {
+        pickups.splice(i, 1);
+        if (p.kind === 'gem') { state.gems++; sfx('gem'); }
+        else { state.hp = Math.min(state.hpMax, state.hp + 2); sfx('heal'); }
+      } else if (p.t > 20) pickups.splice(i, 1);
+    }
+    for (var j = parts.length - 1; j >= 0; j--) {
+      var q = parts[j];
+      q.t += dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 120 * dt; q.vx *= 0.96;
+      if (q.t >= q.life) parts.splice(j, 1);
+    }
+  }
+
+  // Filled in by later tasks (hearts, boulders, quests).
+  function playerHit(n, fromX, fromY) {
+    var t = now();
+    if (horn.dash || (state.fx.invulnUntil || 0) > t) return;
+    state.hp = Math.max(0, state.hp - n);
+    state.fx.invulnUntil = t + 1200;
+    var a = Math.atan2(state.y - fromY, state.x - fromX);
+    var res = SPK.moveAndSlide(map, { x: state.x, y: state.y, r: BODY_R }, Math.cos(a) * TILE * 0.6, Math.sin(a) * TILE * 0.6, collideCtx());
+    state.x = res.x; state.y = res.y;
+    shake = Math.max(shake, 0.12);
+    sfx('hurt');
+    if (state.hp <= 0) state.hp = 1; // sleepy wake-up arrives in the next task
+  }
+  function onHornContact(hits) { /* cracked boulders: next task */ }
+  function onEnemyPopped(e) { /* quests/hints: later task */ }
+  function sfx(name) { /* sound arrives with the audio task */ }
 
   // ── Camera ───────────────────────────────────────────────────────────
   function clampCam(x, y) {
@@ -520,10 +785,12 @@
       return;
     }
     if (state.mode !== 'play') return;
-    var v = moveVec();
+    if (hitPause > 0) { hitPause -= dt; return; }
+    shake = Math.max(0, shake - dt);
+    var v = horn.dash ? { x: 0, y: 0 } : moveVec();
     var t = input.consumeTap();
     if (t) walkTo = screenToWorld(t.x, t.y);
-    if (v.x || v.y) walkTo = null;
+    if (v.x || v.y || horn.dash) walkTo = null;
     else if (walkTo) {
       var dx = walkTo.x - state.x, dy = walkTo.y - state.y, d = Math.hypot(dx, dy);
       if (d < 4) walkTo = null; else v = { x: dx / d, y: dy / d };
@@ -541,8 +808,11 @@
     } else doorArmed = true;
     exploreT -= dt;
     if (exploreT <= 0) { exploreT = 0.25; markExplored(); }
-    if (pressed('magic')) stats.bolts++;
-    pressed('horn'); pressed('map');
+    updateHorn(dt);
+    updateMagic(dt);
+    updateEnemies(dt);
+    updatePickups(dt);
+    pressed('map');
     var c = clampCam(state.x, state.y);
     var k = Math.min(1, dt * 10);
     cam.x += (c.x - cam.x) * k; cam.y += (c.y - cam.y) * k;
@@ -727,9 +997,111 @@
     ctx.save();
     ctx.translate(state.x, state.y);
     ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(0, TILE * 0.38, TILE * 0.36, TILE * 0.12, 0, 0, 7); ctx.fill();
+    if ((state.fx.invulnUntil || 0) > now() && Math.floor(now() / 200) % 2) ctx.globalAlpha = 0.35; // 2.5 Hz blink
     if (Math.cos(state.facing) > 0.1) ctx.scale(-1, 1); // the emoji faces left
+    if (horn.dash) ctx.rotate(-0.25);
     emoji('🦄', 0, 0, TILE * 1.1);
     ctx.restore();
+  }
+
+  var SLIME_COLORS = [['#4ade80', '#16a34a'], ['#f472b6', '#db2777'], ['#60a5fa', '#2563eb']];
+  function drawSlime(e) {
+    var big = e.kind === 'slimeBig' ? 1.35 : e.kind === 'slimeMini' ? 0.7 : 1;
+    var hopUp = e.hop > 0 ? Math.sin((1 - e.hop / 0.35) * Math.PI) * 6 : 0;
+    var sq = 1 + e.squish * 0.25, w = 12 * big * sq, h = 10 * big / sq;
+    var c = SLIME_COLORS[e.hue % 3];
+    ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 8 * big, w, 3.5 * big, 0, 0, 7); ctx.fill();
+    ctx.save(); ctx.translate(e.x, e.y - Math.max(0, hopUp));
+    ctx.fillStyle = e.flash > 0 ? '#ffffff' : c[0];
+    ctx.beginPath(); ctx.moveTo(-w, 8 * big); ctx.quadraticCurveTo(-w, -h * 1.4, 0, -h * 1.4); ctx.quadraticCurveTo(w, -h * 1.4, w, 8 * big); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = c[1]; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(-w * 0.45, -h * 0.7, 2.5 * big, 3.5 * big, -0.4, 0, 7); ctx.fill();
+    ctx.fillStyle = '#1f2937';
+    ctx.beginPath(); ctx.arc(-3.5 * big, -1 * big, 1.8 * big, 0, 7); ctx.arc(3.5 * big, -1 * big, 1.8 * big, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  function drawMushroom(e) {
+    var sq = 1 + e.squish * 0.3;
+    ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 10, 11, 3.5, 0, 0, 7); ctx.fill();
+    ctx.save(); ctx.translate(e.x, e.y); ctx.scale(sq, 1 / sq);
+    ctx.fillStyle = e.flash > 0 ? '#fff' : '#fde7c8'; ctx.fillRect(-6, -2, 12, 12);
+    ctx.fillStyle = e.flash > 0 ? '#fff' : '#ef4444';
+    ctx.beginPath(); ctx.arc(0, -2, 13, Math.PI, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-6, -8, 2.5, 0, 7); ctx.arc(4, -11, 2, 0, 7); ctx.arc(8, -5, 1.8, 0, 7); ctx.fill();
+    ctx.fillStyle = '#1f2937';
+    ctx.beginPath(); ctx.arc(-3, 3, 1.5, 0, 7); ctx.arc(3, 3, 1.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 1.5; // grumpy eyebrows
+    ctx.beginPath(); ctx.moveTo(-5.5, -0.5); ctx.lineTo(-1.5, 1); ctx.moveTo(5.5, -0.5); ctx.lineTo(1.5, 1); ctx.stroke();
+    ctx.restore();
+  }
+  function drawCombat() {
+    pickups.forEach(function (p) {
+      var bob = p.z + Math.sin(p.t * 5) * 1.5;
+      if (p.kind === 'gem') {
+        ctx.save(); ctx.translate(p.x, p.y - bob - 4);
+        ctx.fillStyle = '#22d3ee'; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(5, 0); ctx.lineTo(0, 7); ctx.lineTo(-5, 0); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.fillRect(-2, -3, 2, 3);
+        ctx.restore();
+      } else emoji('💗', p.x, p.y - bob - 4, TILE * 0.45);
+    });
+    var list = enemies.slice().sort(function (a, b) { return a.y - b.y; });
+    var drewPlayer = false;
+    for (var i = 0; i < list.length; i++) {
+      if (!drewPlayer && list[i].y > state.y) { drawPlayer(); drewPlayer = true; }
+      if (list[i].kind === 'mushroom') drawMushroom(list[i]); else drawSlime(list[i]);
+    }
+    if (!drewPlayer) drawPlayer();
+    spores.forEach(function (p) {
+      ctx.fillStyle = 'rgba(190,242,100,.85)'; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#65a30d'; ctx.lineWidth = 1.5; ctx.stroke();
+    });
+    bolts.forEach(function (b) {
+      var a = Math.atan2(b.vy, b.vx);
+      ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a);
+      ctx.fillStyle = 'rgba(253,224,71,.35)'; ctx.beginPath(); ctx.ellipse(-8, 0, 12, 5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = b.color || '#fef08a'; ctx.beginPath(); ctx.arc(0, 0, 5, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(1, -1, 2, 0, 7); ctx.fill();
+      ctx.restore();
+    });
+    parts.forEach(function (q) {
+      ctx.globalAlpha = Math.max(0, 1 - q.t / q.life);
+      ctx.fillStyle = q.c; ctx.fillRect(q.x - q.r / 2, q.y - q.r / 2, q.r, q.r);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // ── HUD (screen space) ───────────────────────────────────────────────
+  function drawHeart(x, y, s, fill) { // fill: 0, 0.5 or 1
+    ctx.save(); ctx.translate(x, y); ctx.scale(s / 20, s / 20);
+    var path = function () { ctx.beginPath(); ctx.moveTo(10, 18); ctx.bezierCurveTo(-6, 8, 0, -4, 10, 4); ctx.bezierCurveTo(20, -4, 26, 8, 10, 18); ctx.closePath(); };
+    path(); ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fill();
+    if (fill > 0) {
+      ctx.save(); path(); ctx.clip();
+      ctx.fillStyle = '#f43f5e'; ctx.fillRect(-2, -6, fill >= 1 ? 26 : 12, 26);
+      ctx.restore();
+    }
+    path(); ctx.lineWidth = 2; ctx.strokeStyle = '#9f1239'; ctx.stroke();
+    ctx.restore();
+  }
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function drawHUD() {
+    var ins = insets(), x = ins.l + 12, y = ins.t + 12, s = Math.max(22, Math.min(30, W / 28));
+    var hearts = state.hpMax / 2;
+    for (var i = 0; i < hearts; i++) {
+      var f = Math.max(0, Math.min(1, (state.hp - i * 2) / 2));
+      drawHeart(x + (i % 8) * (s + 3), y + Math.floor(i / 8) * (s + 3), s, f);
+    }
+    var gy = y + Math.ceil(hearts / 8) * (s + 3) + 4;
+    ctx.fillStyle = 'rgba(255,255,255,.75)';
+    roundRect(x - 4, gy - 2, 86, s + 4, 12); ctx.fill();
+    emoji('💎', x + s / 2, gy + s / 2, s * 0.8);
+    ctx.fillStyle = '#5b21b6'; ctx.font = '700 ' + Math.round(s * 0.75) + 'px Fredoka, ui-rounded, system-ui, sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(state.gems), x + s + 4, gy + s / 2 + 1);
   }
 
   function draw() {
@@ -739,15 +1111,16 @@
     if (!map || state.mode === 'title' || state.mode === 'choose') return;
     ctx.save();
     ctx.translate(Math.round(W / 2), Math.round(H / 2)); ctx.scale(scale, scale); ctx.translate(-cam.x, -cam.y);
+    if (shake > 0) ctx.translate((Math.random() - 0.5) * 8 * shake / 0.12, (Math.random() - 0.5) * 8 * shake / 0.12);
     drawWorld();
-    drawPlayer();
+    drawCombat();
     ctx.restore();
     if (map.cave) {
       var g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.7);
       g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
-    if (state.mode === 'play') drawControls();
+    if (state.mode === 'play') { drawHUD(); drawControls(); }
     if (fade) {
       ctx.fillStyle = 'rgba(15,10,30,' + Math.max(0, 1 - Math.abs(fade.t / fade.dur * 2 - 1)) + ')';
       ctx.fillRect(0, 0, W, H);
@@ -777,6 +1150,9 @@
     get inputs() { return { active: input.active(), lastReset: input.lastReset, move: input.moveVec() }; },
     layout: function () { return input.layout(); },
     _teleport: function (mapId, tx, ty) { teleport(mapId, tx, ty); },
+    _spawn: function (kind, tx, ty) { spawnEnemy(kind, (tx + 0.5) * TILE, (ty + 0.5) * TILE, null); },
+    _clearEnemies: function () { enemies = []; spores = []; },
+    get enemies() { return enemies.length; },
   };
 
   resize();

@@ -310,4 +310,52 @@ test('coming through a door you step straight out of it', () => {
   assert.deepEqual({ ...SPK.doorArrival('meadow:D:24,5') }, { map: 'meadow', tx: 24, ty: 6 });
 });
 
+// ── Task 5: combat ──────────────────────────────────────────────────────
+const T = SPK.TILE;
+const foe = (kind, tx, ty) => ({ kind, x: tx * T, y: ty * T, hp: SPK.ENEMIES[kind].hp });
+
+test('pickTarget picks the nearest enemy in the cone', () => {
+  const a = foe('slime', 3, 0), b = foe('slime', 5, 0), behind = foe('slime', -1, 0);
+  assert.equal(SPK.pickTarget(0, 0, 0, [b, behind, a], 7 * T, 120), a);
+});
+
+test('pickTarget is null when enemies are only behind or out of range', () => {
+  assert.equal(SPK.pickTarget(0, 0, 0, [foe('slime', -2, 0), foe('slime', 9, 0)], 7 * T, 120), null);
+  const dead = foe('slime', 2, 0); dead.hp = 0;
+  assert.equal(SPK.pickTarget(0, 0, 0, [dead], 7 * T, 120), null);
+});
+
+test('fanAngles spreads bolts evenly around the aim', () => {
+  const d = Math.PI / 180;
+  const f = SPK.fanAngles(0, 5, 50);
+  [-25, -12.5, 0, 12.5, 25].forEach((deg, i) => assert.ok(near(f[i], deg * d, 1e-9), `${i}: ${f[i]}`));
+  assert.deepEqual(Array.from(SPK.fanAngles(1, 1, 50)), [1]);
+});
+
+test('big slime splits into 2 minis on pop', () => {
+  const e = foe('slimeBig', 4, 4);
+  let r = SPK.damageEnemy(e, 3);
+  assert.equal(r.popped, false);
+  assert.equal(r.spawn.length, 0);
+  r = SPK.damageEnemy(e, 1);
+  assert.equal(r.popped, true);
+  assert.equal(r.spawn.length, 2);
+  assert.ok(r.spawn.every((s) => s.kind === 'slimeMini'));
+  assert.equal(SPK.damageEnemy(foe('slime', 0, 0), 5).spawn.length, 0);
+});
+
+test('enemyHit caps damage at half a heart on easy', () => {
+  assert.equal(SPK.enemyHit({ difficulty: 'easy' }, 2), 1);
+  assert.equal(SPK.enemyHit({ difficulty: 'normal' }, 2), 2);
+  assert.equal(SPK.enemyHit({ difficulty: 'normal' }, 0), 1);
+});
+
+test('enemy stats match the design', () => {
+  assert.equal(SPK.ENEMIES.slime.hp, 2);
+  assert.equal(SPK.ENEMIES.slimeBig.hp, 4);
+  assert.equal(SPK.ENEMIES.slimeMini.hp, 1);
+  assert.equal(SPK.ENEMIES.mushroom.hp, 3);
+  assert.equal(SPK.ENEMIES.mushroom.spore.every, 2.2);
+});
+
 export { SPK, near };
