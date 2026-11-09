@@ -58,5 +58,22 @@
     "controls": "Swipe or tap to move",
     "background": "#24164d",
     "saves": false
+  },
+  {
+    "id": "sparklehorn-adventure",
+    "file": "sparklehorn-adventure.html",
+    "title": "Sparklehorn Adventure",
+    "tagline": "Explore, find magic powers, and pop grumpy mushrooms!",
+    "emoji": "🦄",
+    "colors": [
+      "#34d399",
+      "#8b5cf6"
+    ],
+    "orientation": "landscape",
+    "controls": "Drag to walk • 🦄 horn • ✨ magic",
+    "background": "#1e293b",
+    "menuButton": "top-right",
+    "saves": true,
+    "startOver": false
   }
 ]

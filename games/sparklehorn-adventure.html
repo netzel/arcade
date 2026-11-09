@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Sparklehorn Adventure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: #1e293b;
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    font-family: 'Fredoka', ui-rounded, 'Arial Rounded MT Bold', system-ui, sans-serif;
+    color: #3b1d6e; overscroll-behavior: none;
+  }
+  canvas {
+    position: fixed; inset: 0; width: 100%; height: 100%; display: block;
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  }
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3vh;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+             max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    background: radial-gradient(circle at 50% 35%, #a7f3d0 0%, #6ee7b7 35%, #8b5cf6 100%);
+    touch-action: none; transition: opacity .3s ease, visibility .3s;
+  }
+  .overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+  .logo { font-size: clamp(34px, 8vmin, 72px); font-weight: 700; color: #fff; text-align: center; line-height: 1;
+    text-shadow: 0 4px 0 #6d28d9, 0 8px 24px rgba(0,0,0,.25); }
+  .logo small { display: block; font-size: .45em; color: #fef3c7; margin-top: .3em; }
+  .hero { font-size: clamp(64px, 18vmin, 150px); line-height: 1; animation: bob 2.4s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-10px) rotate(-3deg); } }
+  .big {
+    font: inherit; font-weight: 700; border: none; border-radius: 999px; cursor: pointer;
+    background: #fff; color: #6d28d9; box-shadow: 0 6px 0 #6d28d9, 0 10px 24px rgba(0,0,0,.2);
+    font-size: clamp(26px, 6vmin, 44px); padding: .35em 1.2em; min-width: 140px; min-height: 72px;
+    touch-action: manipulation;
+  }
+  .big:active { transform: translateY(4px); box-shadow: 0 2px 0 #6d28d9; }
+  .row { display: flex; gap: 4vmin; flex-wrap: wrap; justify-content: center; }
+  .pick { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: .3em .9em; }
+  .pick .e { font-size: 1.6em; line-height: 1.1; }
+  .pick .l { font-size: .55em; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="overlay" id="title">
+  <div class="logo">Sparklehorn<small>Adventure</small></div>
+  <div class="hero" aria-hidden="true">🦄</div>
+  <button class="big" id="play" type="button" aria-label="Play">▶</button>
+</div>
+
+<div class="overlay hidden" id="diff">
+  <div class="row">
+    <button class="big pick" id="easy" type="button" aria-label="Easy"><span class="e">🐣</span><span class="l">Easy</span></button>
+    <button class="big pick" id="normal" type="button" aria-label="Normal"><span class="e">🦄</span><span class="l">Normal</span></button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="welcome">
+  <div class="hero" aria-hidden="true">🦄✨</div>
+  <div class="logo" style="font-size:clamp(26px,6vmin,48px)">Welcome back!</div>
+  <button class="big" id="resume" type="button" aria-label="Keep playing">▶</button>
+</div>
+
+<!-- Pure game logic: no DOM. Unit-tested by tests/sparklehorn.test.mjs. -->
+<script id="spk-core">
+(function (G) {
+  'use strict';
+  var SPK = {};
+  SPK.TILE = 32;
+
+  SPK.DIFF = {
+    easy:   { hp: 12, autoMagic: true,  autoMagicEvery: 0.5, enemySpeed: 0.7, enemyAtk: 0.7, maxHit: 1, hintAfter: 45,   beetleMagicFull: true },
+    normal: { hp: 8,  autoMagic: false, autoMagicEvery: 0.5, enemySpeed: 1,   enemyAtk: 1,   maxHit: 2, hintAfter: null, beetleMagicFull: false },
+  };
+
+  SPK.createGame = function (difficulty) {
+    var d = SPK.DIFF[difficulty];
+    if (!d) throw new Error('unknown difficulty: ' + difficulty);
+    return {
+      mode: 'intro', difficulty: difficulty, map: 'meadow', x: 0, y: 0, facing: 0,
+      hp: d.hp, hpMax: d.hp, gems: 0, powers: {}, chests: [], friends: [], heartPieces: [],
+      campfires: [], wakeCampfire: 'home', bossBeaten: false, broken: [], explored: {},
+      closet: { owned: [], wearing: {} }, fx: {},
+    };
+  };
+
+  G.SPK = SPK;
+})(globalThis);
+</script>
+
+<!-- Canvas, overlays, input wiring, audio and the frame loop. -->
+<script id="spk-game">
+(function () {
+  'use strict';
+  var SPK = window.SPK;
+  var TILE = SPK.TILE;
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  var $ = function (id) { return document.getElementById(id); };
+
+  var W = 0, H = 0, DPR = 1, scale = 1;
+  var state = { mode: 'title' };
+  var frames = 0, errors = 0, last = 0, introLeft = 0;
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+    // ~11 tiles tall in landscape, ~9 tiles wide in portrait.
+    scale = W >= H ? H / (11 * TILE) : W / (9 * TILE);
+  }
+
+  // ── Overlays: pointerup only (no click-only handlers) ────────────────
+  function onTap(el, fn) {
+    el.addEventListener('pointerup', function (e) { e.preventDefault(); fn(); });
+    el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
+  }
+  function show(id, on) { $(id).classList.toggle('hidden', !on); }
+
+  onTap($('play'), function () {
+    if (state.mode !== 'title') return;
+    state.mode = 'choose';
+    show('title', false); show('diff', true);
+  });
+  onTap($('easy'), function () { startGame('easy'); });
+  onTap($('normal'), function () { startGame('normal'); });
+
+  // Idempotent: only the first call from the difficulty screen starts a game.
+  function startGame(difficulty) {
+    if (state.mode !== 'choose') return;
+    state = SPK.createGame(difficulty);
+    introLeft = 10;
+    show('diff', false);
+  }
+
+  canvas.addEventListener('pointerdown', function () {
+    if (state.mode === 'intro') { state.mode = 'play'; introLeft = 0; }
+  });
+  canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  // ── Loop ─────────────────────────────────────────────────────────────
+  function update(dt) {
+    if (state.mode === 'intro') { introLeft -= dt; if (introLeft <= 0) state.mode = 'play'; }
+  }
+
+  function draw() {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.fillStyle = '#86efac';
+    ctx.fillRect(0, 0, W, H);
+    if (state.mode === 'intro' || state.mode === 'play') {
+      ctx.font = Math.round(TILE * scale * 1.2) + 'px serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('🦄', W / 2, H / 2);
+    }
+  }
+
+  function frame(t) {
+    requestAnimationFrame(frame);
+    try {
+      var dt = last ? Math.min(0.05, Math.max(0, (t - last) / 1000)) : 0;
+      last = t;
+      frames++;
+      update(dt);
+      draw();
+    } catch (e) {
+      errors++;
+      if (errors < 20) console.error(e);
+    }
+  }
+
+  window.__spk = {
+    get state() { return state; },
+    get frames() { return frames; },
+    get errors() { return errors; },
+  };
+
+  window.addEventListener('resize', resize);
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
