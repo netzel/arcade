@@ -133,5 +133,6 @@ function normalize(entry, index) {
     menuButton,
     background,
     saves: entry.saves === true, // off unless a game explicitly opts in
+    startOver: entry.startOver !== false, // false hides in-game Start Over (long adventures)
   };
 }

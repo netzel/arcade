@@ -76,3 +76,11 @@ test('saves are off unless a game explicitly opts in', () => {
   );
   assert.deepEqual(games.map((g) => g.saves), [false, true, false, false]);
 });
+
+test('startOver is on unless a game turns it off', () => {
+  const { games } = buildManifest(
+    [{ file: 'a.html' }, { file: 'b.html', startOver: false }, { file: 'c.html', startOver: 'no' }],
+    ['a.html', 'b.html', 'c.html'],
+  );
+  assert.deepEqual(games.map((g) => g.startOver), [true, false, true]);
+});

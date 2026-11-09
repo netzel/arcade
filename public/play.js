@@ -145,7 +145,7 @@ function start() {
       tile('▶', 'Keep Playing', sheet.close, { wide: true, primary: true, autofocus: true }),
       savesOn ? tile('💾', 'Save', saveView, { disabled: !saveOk }) : null,
       savesOn ? tile('📂', 'Load', loadView, { disabled: !saveOk }) : null,
-      tile('🔄', 'Start Over', () => sheet.confirm({
+      game.startOver === false ? null : tile('🔄', 'Start Over', () => sheet.confirm({
         emoji: '🔄', title: 'Start over?',
         message: savesOn ? 'This game starts from the beginning. Your saved games stay safe.' : 'This game starts again from the beginning.',
         yes: 'Start over', danger: true, back: pauseView,

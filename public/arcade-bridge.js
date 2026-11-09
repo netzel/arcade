@@ -184,7 +184,7 @@
     for (var i = 0; i < media.length; i++) {
       if (!media[i].paused) { media[i].pause(); pausedMedia.push(media[i]); }
     }
-    applyAudio();
+    applyAudio();    emit('pause');
   }
   function pause() {
     if (paused) return;
@@ -207,7 +207,7 @@
     held.clear();
     pausedMedia.forEach(function (m) { try { m.play(); } catch (e) { /* ignore */ } });
     pausedMedia = [];
-    applyAudio();
+    applyAudio();    emit('resume');
   }
 
   // ── Save / load hand-off ─────────────────────────────────────────────
