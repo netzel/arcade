@@ -90,6 +90,91 @@
     };
   };
 
+  // ── Controls layout (CSS px). inset = safe-area {t,r,b,l}. ──────────
+  SPK.layoutControls = function (w, h, inset) {
+    var i = inset || { t: 0, r: 0, b: 0, l: 0 };
+    var portrait = h > w;
+    var R = w - i.r, B = h - i.b;
+    var L = {
+      portrait: portrait,
+      map: { x: R - 40, y: i.t + 104, r: 26 }, // under the arcade's ⏸ (top-right)
+    };
+    if (portrait) {
+      L.joyZone = { x: i.l, y: h * 0.55, w: w * 0.6 - i.l, h: h * 0.45 };
+      L.magic = { x: R - 72, y: B - 90, r: 50 };
+      L.horn = { x: R - 72, y: B - 200, r: 44 };
+    } else {
+      L.joyZone = { x: i.l, y: h * 0.25, w: w * 0.55 - i.l, h: h * 0.75 };
+      L.magic = { x: R - 80, y: B - 80, r: 50 };
+      L.horn = { x: R - 190, y: B - 60, r: 44 };
+    }
+    return L;
+  };
+
+  // ── Input state machine ─────────────────────────────────────────────
+  // Every finger is tracked by pointerId and keeps the role it got on
+  // pointerdown until it lifts. Anything that could strand a "held" finger
+  // (cancel, blur, rotate, pause, a silent finger) clears state.
+  var JOY_R = 60, DEADZONE = 8, BTN_SLOP = 12, TAP_MS = 250, TAP_PX = 12, WATCHDOG_MS = 3000;
+  var BUTTONS = ['magic', 'horn', 'map'];
+
+  SPK.createInput = function (layout) {
+    var L = layout;
+    var ptrs = {};          // id -> {role, x0, y0, x, y, t0, t, maxD}
+    var presses = {};       // name -> pending edge press
+    var tap = null;
+    var api = { lastReset: '' };
+
+    function inCircle(c, x, y) { return Math.hypot(x - c.x, y - c.y) <= c.r + BTN_SLOP; }
+    function inRect(z, x, y) { return x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h; }
+    function joyOwner() { for (var k in ptrs) if (ptrs[k].role === 'joy') return ptrs[k]; return null; }
+
+    api.down = function (id, x, y, t) {
+      if (ptrs[id]) api.cancel(id);
+      var role = 'none';
+      for (var b = 0; b < BUTTONS.length; b++) if (inCircle(L[BUTTONS[b]], x, y)) { role = BUTTONS[b]; break; }
+      if (role === 'none' && inRect(L.joyZone, x, y) && !joyOwner()) role = 'joy';
+      ptrs[id] = { role: role, x0: x, y0: y, x: x, y: y, t0: t, t: t, maxD: 0 };
+      if (role !== 'none' && role !== 'joy') presses[role] = true;
+      return role;
+    };
+    api.move = function (id, x, y, t) {
+      var p = ptrs[id]; if (!p) return;
+      p.x = x; p.y = y; p.t = t;
+      p.maxD = Math.max(p.maxD, Math.hypot(x - p.x0, y - p.y0));
+    };
+    api.up = function (id, x, y, t) {
+      var p = ptrs[id]; if (!p) return;
+      api.move(id, x, y, t);
+      if (p.role === 'joy' && t - p.t0 <= TAP_MS && p.maxD < TAP_PX) tap = { x: p.x0, y: p.y0 };
+      delete ptrs[id];
+    };
+    api.cancel = function (id) { delete ptrs[id]; };
+    api.resetAll = function (reason) {
+      ptrs = {}; presses = {}; tap = null;
+      api.lastReset = reason || 'reset';
+    };
+    api.relayout = function (layout2) { L = layout2; api.resetAll('relayout'); };
+    api.layout = function () { return L; };
+    api.tick = function (t) {
+      for (var k in ptrs) if (t - ptrs[k].t > WATCHDOG_MS) { delete ptrs[k]; api.lastReset = 'watchdog'; }
+    };
+    api.moveVec = function () {
+      var p = joyOwner();
+      if (!p) return { x: 0, y: 0 };
+      var dx = p.x - p.x0, dy = p.y - p.y0, d = Math.hypot(dx, dy);
+      if (d < DEADZONE) return { x: 0, y: 0 };
+      var m = Math.min(1, (d - DEADZONE) / (JOY_R - DEADZONE)) / d;
+      return { x: dx * m, y: dy * m };
+    };
+    api.joy = function () { var p = joyOwner(); return p ? { x0: p.x0, y0: p.y0, x: p.x, y: p.y, r: JOY_R } : null; };
+    api.held = function (name) { for (var k in ptrs) if (ptrs[k].role === name) return true; return false; };
+    api.consumePress = function (name) { var v = !!presses[name]; presses[name] = false; return v; };
+    api.consumeTap = function () { var v = tap; tap = null; return v; };
+    api.active = function () { return Object.keys(ptrs).length; };
+    return api;
+  };
+
   G.SPK = SPK;
 })(globalThis);
 </script>
@@ -107,13 +192,30 @@
   var W = 0, H = 0, DPR = 1, scale = 1;
   var state = { mode: 'title' };
   var frames = 0, errors = 0, last = 0, introLeft = 0;
+  var cam = { x: 0, y: 0 };
+  var walkTo = null;
+  var keys = {}, keyPress = {};
+  var stats = { bolts: 0, pops: 0 };
 
+  // ── Layout ───────────────────────────────────────────────────────────
+  var probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+  document.body.appendChild(probe);
+  function insets() {
+    var cs = getComputedStyle(probe);
+    return { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
+  }
+  function layout() { return SPK.layoutControls(W, H, insets()); }
+
+  var input;
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 2);
     W = window.innerWidth; H = window.innerHeight;
     canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
     // ~11 tiles tall in landscape, ~9 tiles wide in portrait.
     scale = W >= H ? H / (11 * TILE) : W / (9 * TILE);
+    if (input) input.relayout(layout()); else input = SPK.createInput(layout());
+    keys = {}; keyPress = {};
   }
 
   // ── Overlays: pointerup only (no click-only handlers) ────────────────
@@ -137,27 +239,122 @@
     state = SPK.createGame(difficulty);
     introLeft = 10;
     show('diff', false);
+    resetInput('start');
   }
 
-  canvas.addEventListener('pointerdown', function () {
-    if (state.mode === 'intro') { state.mode = 'play'; introLeft = 0; }
-  });
-  canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  // ── Pointer input (canvas only) ──────────────────────────────────────
+  function resetInput(reason) { if (input) input.resetAll(reason); keys = {}; keyPress = {}; walkTo = null; }
+  function now() { return performance.now(); }
 
-  // ── Loop ─────────────────────────────────────────────────────────────
+  canvas.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    if (state.mode === 'intro') { state.mode = 'play'; introLeft = 0; return; }
+    input.down(e.pointerId, e.clientX, e.clientY, now());
+  });
+  canvas.addEventListener('pointermove', function (e) { input.move(e.pointerId, e.clientX, e.clientY, now()); });
+  canvas.addEventListener('pointerup', function (e) { input.up(e.pointerId, e.clientX, e.clientY, now()); });
+  canvas.addEventListener('pointercancel', function (e) { input.cancel(e.pointerId); });
+  canvas.addEventListener('lostpointercapture', function (e) { input.cancel(e.pointerId); });
+  canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  window.addEventListener('blur', function () { resetInput('blur'); });
+  window.addEventListener('pagehide', function () { resetInput('pagehide'); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden) resetInput('hidden'); });
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () { setTimeout(resize, 150); });
+  if (window.ArcadeBridge && ArcadeBridge.on) ArcadeBridge.on(function (type) { if (type === 'pause') resetInput('pause'); });
+
+  // ── Keyboard ─────────────────────────────────────────────────────────
+  var KEYMAP = { ArrowLeft: 'l', a: 'l', A: 'l', ArrowRight: 'r', d: 'r', D: 'r', ArrowUp: 'u', w: 'u', W: 'u', ArrowDown: 'dn', s: 'dn', S: 'dn' };
+  var PRESSKEYS = { ' ': 'horn', j: 'horn', J: 'horn', k: 'magic', K: 'magic', f: 'magic', F: 'magic', m: 'map', M: 'map' };
+  window.addEventListener('keydown', function (e) {
+    if (KEYMAP[e.key]) { keys[KEYMAP[e.key]] = true; e.preventDefault(); return; }
+    var name = PRESSKEYS[e.key];
+    if (!name) return;
+    e.preventDefault();
+    if (state.mode === 'intro') { state.mode = 'play'; return; }
+    if (!keys[name]) keyPress[name] = true;
+    keys[name] = true;
+  });
+  window.addEventListener('keyup', function (e) {
+    if (KEYMAP[e.key]) keys[KEYMAP[e.key]] = false;
+    else if (PRESSKEYS[e.key]) keys[PRESSKEYS[e.key]] = false;
+  });
+  function pressed(name) { var k = !!keyPress[name]; keyPress[name] = false; return input.consumePress(name) || k; }
+  function holding(name) { return input.held(name) || !!keys[name]; }
+  function moveVec() {
+    var kx = (keys.r ? 1 : 0) - (keys.l ? 1 : 0), ky = (keys.dn ? 1 : 0) - (keys.u ? 1 : 0);
+    if (kx || ky) { var d = Math.hypot(kx, ky); return { x: kx / d, y: ky / d }; }
+    return input.moveVec();
+  }
+  function screenToWorld(sx, sy) { return { x: cam.x + (sx - W / 2) / scale, y: cam.y + (sy - H / 2) / scale }; }
+
+  // ── Update ───────────────────────────────────────────────────────────
+  var SPEED = 4 * TILE; // px/s
   function update(dt) {
+    input.tick(now());
     if (state.mode === 'intro') { introLeft -= dt; if (introLeft <= 0) state.mode = 'play'; }
+    if (state.mode !== 'play') return;
+    var v = moveVec();
+    var t = input.consumeTap();
+    if (t) walkTo = screenToWorld(t.x, t.y);
+    if (v.x || v.y) walkTo = null;
+    else if (walkTo) {
+      var dx = walkTo.x - state.x, dy = walkTo.y - state.y, d = Math.hypot(dx, dy);
+      if (d < 4) walkTo = null; else v = { x: dx / d, y: dy / d };
+    }
+    state.x += v.x * SPEED * dt; state.y += v.y * SPEED * dt;
+    if (v.x || v.y) state.facing = Math.atan2(v.y, v.x);
+    if (pressed('magic')) stats.bolts++;
+    pressed('horn'); pressed('map');
+    cam.x = state.x; cam.y = state.y;
+  }
+
+  // ── Draw ─────────────────────────────────────────────────────────────
+  function circleBtn(c, emoji, down) {
+    ctx.save();
+    ctx.globalAlpha = down ? 0.95 : 0.75;
+    ctx.fillStyle = down ? '#fde68a' : '#ffffff';
+    ctx.beginPath(); ctx.arc(c.x, c.y + (down ? 3 : 0), c.r, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = '#6d28d9'; ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.font = Math.round(c.r * 0.95) + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, c.x, c.y + (down ? 5 : 2));
+    ctx.restore();
+  }
+  function drawControls() {
+    var L = input.layout();
+    var j = input.joy();
+    if (j) {
+      ctx.save();
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(j.x0, j.y0, j.r, 0, Math.PI * 2); ctx.fill();
+      var dx = j.x - j.x0, dy = j.y - j.y0, d = Math.hypot(dx, dy), k = d > j.r ? j.r / d : 1;
+      ctx.globalAlpha = 0.8;
+      ctx.beginPath(); ctx.arc(j.x0 + dx * k, j.y0 + dy * k, j.r * 0.45, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    circleBtn(L.horn, '🦄', holding('horn'));
+    circleBtn(L.magic, '✨', holding('magic'));
+    circleBtn(L.map, '🗺️', input.held('map'));
   }
 
   function draw() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.fillStyle = '#86efac';
     ctx.fillRect(0, 0, W, H);
-    if (state.mode === 'intro' || state.mode === 'play') {
-      ctx.font = Math.round(TILE * scale * 1.2) + 'px serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('🦄', W / 2, H / 2);
-    }
+    if (state.mode === 'title' || state.mode === 'choose') return;
+    // grid so movement is visible (replaced by the tile map in Task 4)
+    ctx.save();
+    ctx.translate(W / 2, H / 2); ctx.scale(scale, scale); ctx.translate(-cam.x, -cam.y);
+    ctx.strokeStyle = 'rgba(0,0,0,.06)';
+    var x0 = Math.floor((cam.x - W / scale) / TILE) * TILE, y0 = Math.floor((cam.y - H / scale) / TILE) * TILE;
+    for (var x = x0; x < cam.x + W / scale; x += TILE) { ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, cam.y + H / scale); ctx.stroke(); }
+    for (var y = y0; y < cam.y + H / scale; y += TILE) { ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(cam.x + W / scale, y); ctx.stroke(); }
+    ctx.font = Math.round(TILE * 1.2) + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🦄', state.x, state.y);
+    ctx.restore();
+    if (state.mode === 'play') drawControls();
   }
 
   function frame(t) {
@@ -178,9 +375,12 @@
     get state() { return state; },
     get frames() { return frames; },
     get errors() { return errors; },
+    get bolts() { return stats.bolts; },
+    get pops() { return stats.pops; },
+    get inputs() { return { active: input.active(), lastReset: input.lastReset, move: input.moveVec() }; },
+    layout: function () { return input.layout(); },
   };
 
-  window.addEventListener('resize', resize);
   resize();
   requestAnimationFrame(frame);
 })();
