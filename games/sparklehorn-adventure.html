@@ -347,6 +347,47 @@
     return false;
   };
 
+  // ── Short-term power-ups ─────────────────────────────────────────────
+  SPK.POWERUPS = {
+    starBurst: { secs: 15, icon: '🌟' },
+    swirl: { secs: 30, orbs: 6, radius: 1.4, spin: 2.4, icon: '🔮' }, // radius in tiles, spin rad/s
+  };
+  SPK.grantPowerup = function (state, kind, nowMs) {
+    var def = SPK.POWERUPS[kind];
+    if (!def) throw new Error('unknown power-up: ' + kind);
+    state.fx[kind] = { until: nowMs + def.secs * 1000, since: nowMs };
+    if (def.orbs) state.fx[kind].orbs = def.orbs;
+  };
+  SPK.activePowerups = function (state, nowMs) {
+    var out = [];
+    for (var k in SPK.POWERUPS) {
+      var f = state.fx[k];
+      if (!f || f.until <= nowMs) continue;
+      if (SPK.POWERUPS[k].orbs && !(f.orbs > 0)) continue;
+      out.push(k);
+    }
+    return out;
+  };
+  SPK.hasPowerup = function (state, kind, nowMs) { return SPK.activePowerups(state, nowMs).indexOf(kind) >= 0; };
+  SPK.swirlOrbPositions = function (state, nowMs) {
+    var f = state.fx.swirl, def = SPK.POWERUPS.swirl, out = [];
+    if (!f || f.until <= nowMs || !(f.orbs > 0)) return out;
+    var base = (nowMs / 1000) * def.spin, r = def.radius * SPK.TILE;
+    for (var i = 0; i < f.orbs; i++) {
+      var a = base + (i / f.orbs) * Math.PI * 2;
+      out.push({ x: state.x + Math.cos(a) * r, y: state.y + Math.sin(a) * r, i: i });
+    }
+    return out;
+  };
+  SPK.swirlHit = function (state) {
+    var f = state.fx.swirl;
+    if (f && f.orbs > 0) f.orbs--;
+  };
+  // Angles of the bolts one Magic press fires.
+  SPK.fireMagic = function (state, aim, nowMs) {
+    return SPK.fanAngles(aim, SPK.hasPowerup(state, 'starBurst', nowMs) ? 5 : 1, 50);
+  };
+
   SPK.enemyHit = function (state, raw) {
     return Math.max(1, Math.min(raw, SPK.DIFF[state.difficulty].maxHit));
   };
@@ -656,6 +697,7 @@
     r.spawn.forEach(function (s) { spawnEnemy(s.kind, s.x, s.y, e.group); });
     if (Math.random() < 0.30) for (var i = 0, n = 1 + Math.floor(Math.random() * 3); i < n; i++) dropPickup('gem', e.x, e.y);
     if (Math.random() < 0.12) dropPickup('heart', e.x, e.y);
+    else if (Math.random() < 0.10) dropPickup(Math.random() < 0.5 ? 'starBurst' : 'swirl', e.x, e.y);
     onEnemyPopped(e);
   }
   function hurtEnemy(e, n) {
@@ -726,10 +768,12 @@
     var tgt = SPK.pickTarget(state.x, state.y, state.facing, enemies, 7 * TILE, 120);
     return tgt ? Math.atan2(tgt.y - state.y, tgt.x - state.x) : state.facing;
   }
+  var RAINBOW = ['#f87171', '#fb923c', '#fde047', '#4ade80', '#60a5fa', '#c084fc'];
   function fireMagic() {
-    var angles = SPK.fanAngles(aimAngle(), 1, 50);
-    angles.forEach(function (a) {
-      bolts.push({ x: state.x + Math.cos(a) * 10, y: state.y + Math.sin(a) * 10, vx: Math.cos(a) * 9 * TILE, vy: Math.sin(a) * 9 * TILE, life: 0.9, dmg: 1 });
+    var angles = SPK.fireMagic(state, aimAngle(), now());
+    angles.forEach(function (a, i) {
+      bolts.push({ x: state.x + Math.cos(a) * 10, y: state.y + Math.sin(a) * 10, vx: Math.cos(a) * 9 * TILE, vy: Math.sin(a) * 9 * TILE, life: 0.9, dmg: 1,
+                   color: angles.length > 1 ? RAINBOW[i % RAINBOW.length] : null });
     });
     stats.bolts++;
     sfx('sparkle');
@@ -790,7 +834,8 @@
       if (p.t > 0.35 && d < TILE * 0.45) {
         pickups.splice(i, 1);
         if (p.kind === 'gem') { state.gems++; sfx('gem'); }
-        else { state.hp = Math.min(state.hpMax, state.hp + 2); sfx('heal'); }
+        else if (p.kind === 'heart') { state.hp = Math.min(state.hpMax, state.hp + 2); sfx('heal'); }
+        else { SPK.grantPowerup(state, p.kind, now()); sfx('power'); burst(state.x, state.y, 24, RAINBOW, 120); }
       } else if (p.t > 20) pickups.splice(i, 1);
     }
     for (var j = parts.length - 1; j >= 0; j--) {
@@ -893,6 +938,47 @@
     if (revealT > 1) emoji('👆', cx, cy + ch * 0.4 + Math.sin(clock * 5) * 3, m * 0.07);
   }
 
+
+  // ── Swirl Shield ─────────────────────────────────────────────────────
+  function updateSwirl() {
+    var orbs = SPK.swirlOrbPositions(state, now());
+    for (var i = 0; i < orbs.length; i++) {
+      for (var j = 0; j < enemies.length; j++) {
+        var e = enemies[j];
+        if (e.hp > 0 && Math.hypot(e.x - orbs[i].x, e.y - orbs[i].y) < TILE * 0.55) {
+          SPK.swirlHit(state);
+          burst(orbs[i].x, orbs[i].y, 12, ['#c4b5fd', '#f0abfc', '#ffffff'], 90);
+          hurtEnemy(e, 2);
+          return; // one orb per frame; positions re-spread next frame
+        }
+      }
+    }
+  }
+  function drawSwirl() {
+    var orbs = SPK.swirlOrbPositions(state, now());
+    orbs.forEach(function (o) {
+      ctx.fillStyle = 'rgba(196,181,253,.45)'; ctx.beginPath(); ctx.arc(o.x, o.y, 9, 0, 7); ctx.fill();
+      ctx.fillStyle = '#a78bfa'; ctx.beginPath(); ctx.arc(o.x, o.y, 5.5, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(o.x - 1.5, o.y - 1.5, 2, 0, 7); ctx.fill();
+    });
+  }
+  function drawPowerTimers() {
+    var list = SPK.activePowerups(state, now()), s = 44, gap = 12, t = now();
+    var x = W / 2 - (list.length * (s + gap) - gap) / 2 + s / 2, y = insets().t + 12 + s / 2;
+    list.forEach(function (k, i) {
+      var f = state.fx[k], left = Math.max(0, (f.until - t) / (SPK.POWERUPS[k].secs * 1000));
+      var cx = x + i * (s + gap);
+      ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.arc(cx, y, s / 2, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#8b5cf6'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(cx, y, s / 2 - 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left); ctx.stroke();
+      emoji(SPK.POWERUPS[k].icon, cx, y + 1, s * 0.55);
+      if (k === 'swirl') {
+        ctx.fillStyle = '#5b21b6'; ctx.font = '700 13px Fredoka, ui-rounded, system-ui, sans-serif';
+        ctx.textAlign = 'center'; ctx.fillText('×' + f.orbs, cx, y + s / 2 + 9);
+      }
+    });
+  }
+
   // ── Camera ───────────────────────────────────────────────────────────
   function clampCam(x, y) {
     var hw = W / 2 / scale, hh = H / 2 / scale, mw = map.w * TILE, mh = map.h * TILE;
@@ -959,6 +1045,7 @@
     updateHorn(dt);
     updateMagic(dt);
     updateEnemies(dt);
+    updateSwirl();
     updatePickups(dt);
     pressed('map');
     var c = clampCam(state.x, state.y);
@@ -1195,7 +1282,12 @@
         ctx.fillStyle = '#22d3ee'; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(5, 0); ctx.lineTo(0, 7); ctx.lineTo(-5, 0); ctx.closePath(); ctx.fill();
         ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.fillRect(-2, -3, 2, 3);
         ctx.restore();
-      } else emoji('💗', p.x, p.y - bob - 4, TILE * 0.45);
+      } else if (p.kind === 'heart') emoji('💗', p.x, p.y - bob - 4, TILE * 0.45);
+      else {
+        ctx.fillStyle = 'rgba(196,181,253,' + (0.45 + 0.2 * Math.sin(p.t * 6)) + ')';
+        ctx.beginPath(); ctx.arc(p.x, p.y - bob - 6, TILE * 0.42, 0, 7); ctx.fill();
+        emoji(SPK.POWERUPS[p.kind].icon, p.x, p.y - bob - 6, TILE * 0.5);
+      }
     });
     var list = enemies.slice().sort(function (a, b) { return a.y - b.y; });
     var drewPlayer = false;
@@ -1204,6 +1296,7 @@
       if (list[i].kind === 'mushroom') drawMushroom(list[i]); else drawSlime(list[i]);
     }
     if (!drewPlayer) drawPlayer();
+    drawSwirl();
     spores.forEach(function (p) {
       ctx.fillStyle = 'rgba(190,242,100,.85)'; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fill();
       ctx.strokeStyle = '#65a30d'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -1272,7 +1365,7 @@
       g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
-    if (state.mode === 'play') { drawHUD(); drawControls(); }
+    if (state.mode === 'play') { drawHUD(); drawPowerTimers(); drawControls(); }
     if (state.mode === 'sleepy') drawSleepy();
     if (state.mode === 'reveal') drawReveal();
     if (fade) {
@@ -1306,6 +1399,7 @@
     _teleport: function (mapId, tx, ty) { teleport(mapId, tx, ty); },
     _spawn: function (kind, tx, ty) { spawnEnemy(kind, (tx + 0.5) * TILE, (ty + 0.5) * TILE, null); },
     _clearEnemies: function () { enemies = []; spores = []; },
+    _give: function (kind) { if (SPK.POWERUPS[kind]) SPK.grantPowerup(state, kind, now()); else state.powers[kind] = true; },
     get enemies() { return enemies.length; },
   };
 

@@ -417,4 +417,48 @@ test('bonking a cracked boulder needs Mighty Horn and 0.6s on the same boulder',
   assert.equal(SPK.bonkTick(g, null, 0.1), false, 'not pushing resets');
 });
 
+// ── Task 7: power-ups ───────────────────────────────────────────────────
+test('star burst lasts 15s and a second one refreshes it', () => {
+  const g = SPK.createGame('normal');
+  SPK.grantPowerup(g, 'starBurst', 0);
+  assert.deepEqual(Array.from(SPK.activePowerups(g, 14999)), ['starBurst']);
+  assert.deepEqual(Array.from(SPK.activePowerups(g, 15001)), []);
+  SPK.grantPowerup(g, 'starBurst', 10000);
+  assert.deepEqual(Array.from(SPK.activePowerups(g, 24000)), ['starBurst']);
+});
+
+test('swirl ends when all 6 orbs are used, even before 30s', () => {
+  const g = SPK.createGame('normal');
+  SPK.grantPowerup(g, 'swirl', 0);
+  assert.equal(g.fx.swirl.orbs, 6);
+  for (let i = 0; i < 5; i++) SPK.swirlHit(g, 0);
+  assert.deepEqual(Array.from(SPK.activePowerups(g, 1000)), ['swirl']);
+  SPK.swirlHit(g, 0);
+  assert.deepEqual(Array.from(SPK.activePowerups(g, 1000)), []);
+  SPK.grantPowerup(g, 'swirl', 2000);
+  assert.equal(g.fx.swirl.orbs, 6, 'a new one brings all the orbs back');
+  assert.deepEqual(Array.from(SPK.activePowerups(g, 31999)), ['swirl']);
+  assert.deepEqual(Array.from(SPK.activePowerups(g, 32001)), []);
+});
+
+test('swirl orb positions shrink as orbs are used', () => {
+  const g = SPK.createGame('normal');
+  SPK.grantPowerup(g, 'swirl', 0);
+  assert.equal(SPK.swirlOrbPositions(g, 500).length, 6);
+  SPK.swirlHit(g, 0); SPK.swirlHit(g, 0);
+  const pos = SPK.swirlOrbPositions(g, 500);
+  assert.equal(pos.length, 4);
+  for (const p of pos) assert.ok(near(Math.hypot(p.x - g.x, p.y - g.y), 1.4 * SPK.TILE, 1e-6));
+});
+
+test('star burst makes magic fire 5 bolts', () => {
+  const g = SPK.createGame('normal');
+  assert.equal(SPK.fireMagic(g, 0, 0).length, 1);
+  SPK.grantPowerup(g, 'starBurst', 0);
+  const a = SPK.fireMagic(g, 0, 100);
+  assert.equal(a.length, 5);
+  assert.ok(near(a[2], 0));
+  assert.equal(SPK.fireMagic(g, 0, 16000).length, 1, 'back to one when it runs out');
+});
+
 export { SPK, near };
