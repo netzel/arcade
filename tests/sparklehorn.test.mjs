@@ -358,4 +358,63 @@ test('enemy stats match the design', () => {
   assert.equal(SPK.ENEMIES.mushroom.spore.every, 2.2);
 });
 
+// ── Task 6: hearts, sleepy, campfires, Mighty Horn ──────────────────────
+test('hurt then immune for 1.2s', () => {
+  const g = SPK.createGame('normal');
+  assert.equal(SPK.hurt(g, 1, 1000), 'ok');
+  assert.equal(g.hp, 7);
+  assert.equal(SPK.hurt(g, 1, 2100), 'immune');
+  assert.equal(g.hp, 7);
+  assert.equal(SPK.hurt(g, 2, 2201), 'ok');
+  assert.equal(g.hp, 5);
+});
+
+test('hurt to zero gives sleepy; wake keeps progress, refills hp, moves to the wake fire', () => {
+  const g = SPK.createGame('normal');
+  g.gems = 17; g.powers.mighty = true; g.chests.push('meadow:C:8,8'); g.map = 'pebble'; g.x = 99; g.y = 99;
+  g.campfires.push('pebble:F:5,10'); g.wakeCampfire = 'pebble:F:5,10';
+  g.hp = 1;
+  assert.equal(SPK.hurt(g, 2, 5000), 'sleepy');
+  assert.equal(g.mode, 'sleepy');
+  assert.equal(g.hp, 0);
+  SPK.wake(g);
+  assert.equal(g.mode, 'play');
+  assert.equal(g.hp, g.hpMax);
+  assert.equal(g.gems, 17);
+  assert.equal(g.powers.mighty, true);
+  assert.deepEqual(Array.from(g.chests), ['meadow:C:8,8']);
+  assert.equal(g.map, 'pebble');
+  const tx = Math.floor(g.x / SPK.TILE), ty = Math.floor(g.y / SPK.TILE);
+  assert.ok(Math.abs(tx - 5) + Math.abs(ty - 10) === 1, `woke next to the fire, at ${tx},${ty}`);
+  assert.equal(SPK.isSolid(SPK.parseMap('pebble'), tx, ty, { broken: [], powers: {} }), false);
+});
+
+test('lighting a campfire sets the wake point and heals', () => {
+  const g = SPK.createGame('easy');
+  g.hp = 3;
+  assert.equal(SPK.lightCampfire(g, 'meadow:F:38,10'), true);
+  assert.equal(g.wakeCampfire, 'meadow:F:38,10');
+  assert.equal(g.hp, 12);
+  assert.equal(SPK.lightCampfire(g, 'meadow:F:38,10'), false);
+  assert.equal(g.campfires.length, 1);
+});
+
+test('hpMaxFor counts complete hearts only', () => {
+  const g = SPK.createGame('normal');
+  g.heartPieces = ['a', 'b', 'c'];
+  assert.equal(SPK.hpMaxFor(g), 8);
+  g.heartPieces.push('d');
+  assert.equal(SPK.hpMaxFor(g), 10);
+});
+
+test('bonking a cracked boulder needs Mighty Horn and 0.6s on the same boulder', () => {
+  const g = SPK.createGame('normal');
+  assert.equal(SPK.bonkTick(g, 'meadow:B:7,27', 1), false, 'no mighty, no break');
+  g.powers.mighty = true;
+  assert.equal(SPK.bonkTick(g, 'meadow:B:7,27', 0.3), false);
+  assert.equal(SPK.bonkTick(g, 'meadow:B:9,9', 0.3), false, 'switching boulders resets');
+  assert.equal(SPK.bonkTick(g, 'meadow:B:9,9', 0.3), true);
+  assert.equal(SPK.bonkTick(g, null, 0.1), false, 'not pushing resets');
+});
+
 export { SPK, near };

@@ -293,6 +293,60 @@
     return { popped: true, spawn: spawn };
   };
 
+  // ── Hearts, sleepy wake-up, campfires ────────────────────────────────
+  SPK.INVULN_MS = 1200;
+  SPK.hurt = function (state, halfHearts, nowMs) {
+    if ((state.fx.invulnUntil || 0) > nowMs) return 'immune';
+    state.hp = Math.max(0, state.hp - halfHearts);
+    state.fx.invulnUntil = nowMs + SPK.INVULN_MS;
+    if (state.hp <= 0) { state.mode = 'sleepy'; return 'sleepy'; }
+    return 'ok';
+  };
+
+  SPK.hpMaxFor = function (state) {
+    return SPK.DIFF[state.difficulty].hp + 2 * Math.floor(state.heartPieces.length / 4);
+  };
+
+  // The tile you stand on next to a campfire: south if open, else any side.
+  SPK.besideFire = function (fireId) {
+    var e = SPK.entity(fireId), m = SPK.parseMap(fireId.split(':')[0]);
+    var dirs = [[0, 1], [1, 0], [-1, 0], [0, -1]];
+    for (var i = 0; i < dirs.length; i++) {
+      var tx = e.tx + dirs[i][0], ty = e.ty + dirs[i][1];
+      if (!SPK.isSolid(m, tx, ty, null)) return { map: m.id, tx: tx, ty: ty };
+    }
+    return { map: m.id, tx: e.tx, ty: e.ty };
+  };
+
+  // Everything you found stays found: only position and hearts change.
+  SPK.wake = function (state) {
+    var at = SPK.besideFire(state.wakeCampfire || SPK.HOME_FIRE);
+    state.map = at.map;
+    state.x = (at.tx + 0.5) * SPK.TILE; state.y = (at.ty + 0.5) * SPK.TILE;
+    state.hp = state.hpMax;
+    state.fx.invulnUntil = 0;
+    state.mode = 'play';
+  };
+
+  SPK.lightCampfire = function (state, id) {
+    var fresh = state.campfires.indexOf(id) < 0;
+    if (fresh) state.campfires.push(id);
+    state.wakeCampfire = id;
+    state.hp = state.hpMax;
+    return fresh;
+  };
+
+  // Walking into a cracked boulder with Mighty Horn bonks it open after 0.6s.
+  SPK.BONK_SECS = 0.6;
+  SPK.bonkTick = function (state, boulderId, dt) {
+    var b = state.fx.bonk || (state.fx.bonk = { id: null, t: 0 });
+    if (!boulderId || !state.powers.mighty) { b.id = null; b.t = 0; return false; }
+    if (b.id !== boulderId) { b.id = boulderId; b.t = 0; }
+    b.t += dt;
+    if (b.t >= SPK.BONK_SECS - 1e-9) { b.id = null; b.t = 0; return true; }
+    return false;
+  };
+
   SPK.enemyHit = function (state, raw) {
     return Math.max(1, Math.min(raw, SPK.DIFF[state.difficulty].maxHit));
   };
@@ -474,6 +528,7 @@
     e.preventDefault();
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     if (state.mode === 'intro') { state.mode = 'play'; introLeft = 0; return; }
+    if (state.mode === 'reveal') { if (revealT > 1) { state.mode = 'play'; resetInput('reveal'); } return; }
     input.down(e.pointerId, e.clientX, e.clientY, now());
   });
   canvas.addEventListener('pointermove', function (e) { input.move(e.pointerId, e.clientX, e.clientY, now()); });
@@ -497,6 +552,7 @@
     if (!name) return;
     e.preventDefault();
     if (state.mode === 'intro') { state.mode = 'play'; return; }
+    if (state.mode === 'reveal') { if (revealT > 1) state.mode = 'play'; return; }
     if (!keys[name]) keyPress[name] = true;
     keys[name] = true;
   });
@@ -552,7 +608,7 @@
   var enemies = [], bolts = [], spores = [], parts = [], pickups = [];
   var fires = [];             // campfire tile centres on this map (enemy no-go rings)
   var horn = { cd: 0, dash: null }, magicCd = 0, autoCd = 0;
-  var hitPause = 0, shake = 0;
+  var hitPause = 0, shake = 0, sleepyT = 0, revealT = 0, reveal = null;
   var ACTIVE_R = 14 * TILE, MAX_ACTIVE = 25;
 
   function spawnEnemy(kind, x, y, group) {
@@ -746,20 +802,96 @@
 
   // Filled in by later tasks (hearts, boulders, quests).
   function playerHit(n, fromX, fromY) {
-    var t = now();
-    if (horn.dash || (state.fx.invulnUntil || 0) > t) return;
-    state.hp = Math.max(0, state.hp - n);
-    state.fx.invulnUntil = t + 1200;
+    if (horn.dash || state.mode !== 'play') return;
+    var r = SPK.hurt(state, n, now());
+    if (r === 'immune') return;
     var a = Math.atan2(state.y - fromY, state.x - fromX);
     var res = SPK.moveAndSlide(map, { x: state.x, y: state.y, r: BODY_R }, Math.cos(a) * TILE * 0.6, Math.sin(a) * TILE * 0.6, collideCtx());
     state.x = res.x; state.y = res.y;
     shake = Math.max(shake, 0.12);
-    sfx('hurt');
-    if (state.hp <= 0) state.hp = 1; // sleepy wake-up arrives in the next task
+    if (r === 'sleepy') { sleepyT = 0; walkTo = null; resetInput('sleepy'); sfx('yawn'); }
+    else sfx('hurt');
   }
-  function onHornContact(hits) { /* cracked boulders: next task */ }
+  function boulderIdFrom(hits) {
+    for (var i = 0; i < hits.length; i++) if (hits[i].code === 'B') return map.id + ':B:' + hits[i].tx + ',' + hits[i].ty;
+    return null;
+  }
+  function breakBoulder(id) {
+    if (state.broken.indexOf(id) >= 0) return;
+    state.broken.push(id);
+    chunks = {};
+    var e = SPK.entity(id);
+    burst((e.tx + 0.5) * TILE, (e.ty + 0.5) * TILE, 24, ['#9ca3af', '#6b7280', '#d1d5db', '#fde047'], 120);
+    shake = Math.max(shake, 0.2);
+    sfx('crumble');
+    onDiscovery();
+  }
+  function onHornContact(hits) {
+    var id = boulderIdFrom(hits);
+    if (id && state.powers.mighty) breakBoulder(id);
+  }
+  function onDiscovery() { /* hint clock: later task */ }
   function onEnemyPopped(e) { /* quests/hints: later task */ }
   function sfx(name) { /* sound arrives with the audio task */ }
+
+
+  // ── Touching things: campfires, the power pedestal ───────────────────
+  function touchThings() {
+    for (var i = 0; i < map.entities.length; i++) {
+      var e = map.entities[i];
+      if (e.kind !== 'F' && e.kind !== 'P') continue;
+      var x = (e.tx + 0.5) * TILE, y = (e.ty + 0.5) * TILE;
+      if (Math.hypot(x - state.x, y - state.y) > TILE * 0.95) continue;
+      if (e.kind === 'F') {
+        var hurt = state.hp < state.hpMax;
+        var fresh = SPK.lightCampfire(state, e.id);
+        if (fresh) { burst(x, y, 20, ['#fb923c', '#fde047', '#fca5a5'], 90); sfx('crackle'); onDiscovery(); }
+        else if (hurt) { burst(state.x, state.y, 10, ['#f9a8d4', '#ffffff'], 60); sfx('heal'); }
+      } else if (e.kind === 'P' && !state.powers.mighty) {
+        state.powers.mighty = true;
+        showReveal({ item: '🌟', picture: ['🪨', '➡️', '🦄', '💥'], text: 'Mighty Horn! Bonk cracked rocks!' });
+        onDiscovery();
+      }
+    }
+  }
+  function showReveal(r) {
+    reveal = r; revealT = 0; state.mode = 'reveal';
+    resetInput('reveal');
+    sfx('fanfare');
+    burst(state.x, state.y, 40, ['#fde047', '#f9a8d4', '#a5f3fc', '#ffffff'], 160);
+  }
+
+  // ── Sleepy and reveal overlays ───────────────────────────────────────
+  function drawSleepy() {
+    var a = Math.min(1, sleepyT / 0.6);
+    ctx.fillStyle = 'rgba(46,16,101,' + (0.75 * a) + ')';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = a;
+    emoji('🥱', W / 2, H / 2 - 10, Math.min(W, H) * 0.22);
+    emoji('💤', W / 2 + Math.min(W, H) * 0.16, H / 2 - Math.min(W, H) * 0.16 - sleepyT * 20, Math.min(W, H) * 0.1);
+    ctx.globalAlpha = 1;
+  }
+  function drawReveal() {
+    var m = Math.min(W, H), cx = W / 2, cy = H / 2;
+    ctx.fillStyle = 'rgba(46,16,101,.6)'; ctx.fillRect(0, 0, W, H);
+    var cw = Math.min(W - 32, m * 1.1), ch = Math.min(H - 32, m * 0.86);
+    ctx.fillStyle = '#fffbeb'; roundRect(cx - cw / 2, cy - ch / 2, cw, ch, 28); ctx.fill();
+    ctx.lineWidth = 6; ctx.strokeStyle = '#a78bfa'; ctx.stroke();
+    // spinning, glowing item
+    var iy = cy - ch * 0.2, sp = Math.min(1, revealT * 1.5);
+    ctx.fillStyle = 'rgba(250,204,21,.35)'; ctx.beginPath(); ctx.arc(cx, iy, m * 0.13 * (1 + 0.08 * Math.sin(clock * 4)), 0, 7); ctx.fill();
+    ctx.save(); ctx.translate(cx, iy); ctx.scale(revealT < 1.05 ? Math.cos(revealT * 6) * sp : 1, sp);
+    emoji(reveal.item, 0, 0, m * 0.16);
+    ctx.restore();
+    // picture sentence
+    var n = reveal.picture.length, size = Math.min(m * 0.11, (cw - 40) / n / 1.15);
+    for (var i = 0; i < n; i++) emoji(reveal.picture[i], cx + (i - (n - 1) / 2) * size * 1.15, cy + ch * 0.1, size);
+    // optional words for readers
+    ctx.fillStyle = '#5b21b6'; ctx.font = '600 ' + Math.round(Math.max(14, m * 0.045)) + 'px Fredoka, ui-rounded, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(reveal.text, cx, cy + ch * 0.27);
+    if (revealT > 1) emoji('👆', cx, cy + ch * 0.4 + Math.sin(clock * 5) * 3, m * 0.07);
+  }
 
   // ── Camera ───────────────────────────────────────────────────────────
   function clampCam(x, y) {
@@ -784,6 +916,18 @@
       if (fade.t >= fade.dur) fade = null;
       return;
     }
+    if (state.mode === 'sleepy') {
+      sleepyT += dt;
+      updatePickups(dt);
+      if (sleepyT >= 1.5) {
+        SPK.wake(state);
+        loadMap(state.map);
+        snapCamera();
+        resetInput('wake');
+      }
+      return;
+    }
+    if (state.mode === 'reveal') { revealT += dt; updatePickups(dt); return; }
     if (state.mode !== 'play') return;
     if (hitPause > 0) { hitPause -= dt; return; }
     shake = Math.max(0, shake - dt);
@@ -800,7 +944,11 @@
       if (walkTo && res.hit.length && Math.hypot(res.x - state.x, res.y - state.y) < 0.5) walkTo = null;
       state.x = res.x; state.y = res.y;
       state.facing = Math.atan2(v.y, v.x);
-    }
+      var bid = boulderIdFrom(res.hit);
+      if (bid && state.powers.mighty && Math.random() < 0.3) burst(state.x + Math.cos(state.facing) * TILE * 0.5, state.y + Math.sin(state.facing) * TILE * 0.5, 1, ['#9ca3af', '#d1d5db'], 30);
+      if (SPK.bonkTick(state, bid, dt)) breakBoulder(bid);
+    } else SPK.bonkTick(state, null, dt);
+    touchThings();
     // doors: step off a door before it can take you anywhere again
     var under = tileUnder(state.x, state.y);
     if (under === 'D' || under === 'U') {
@@ -987,7 +1135,7 @@
         ctx.fillStyle = '#d6d3d1'; ctx.fillRect(x - 10, y - 2, 20, 12);
         if (!state.powers.mighty) {
           ctx.fillStyle = 'rgba(250,204,21,' + (0.35 + 0.25 * Math.sin(clock * 4)) + ')'; ctx.beginPath(); ctx.arc(x, y - 10, 14, 0, 7); ctx.fill();
-          emoji('🪨', x, y - 10 + Math.sin(clock * 3) * 2, TILE * 0.55);
+          emoji('🌟', x, y - 10 + Math.sin(clock * 3) * 2, TILE * 0.55);
         }
       }
     }
@@ -997,6 +1145,10 @@
     ctx.save();
     ctx.translate(state.x, state.y);
     ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(0, TILE * 0.38, TILE * 0.36, TILE * 0.12, 0, 0, 7); ctx.fill();
+    if (state.powers.mighty) {
+      ctx.fillStyle = 'rgba(250,204,21,' + (0.22 + 0.1 * Math.sin(clock * 3)) + ')';
+      ctx.beginPath(); ctx.arc(Math.cos(state.facing) > 0.1 ? 8 : -8, -12, 9, 0, 7); ctx.fill();
+    }
     if ((state.fx.invulnUntil || 0) > now() && Math.floor(now() / 200) % 2) ctx.globalAlpha = 0.35; // 2.5 Hz blink
     if (Math.cos(state.facing) > 0.1) ctx.scale(-1, 1); // the emoji faces left
     if (horn.dash) ctx.rotate(-0.25);
@@ -1121,6 +1273,8 @@
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
     if (state.mode === 'play') { drawHUD(); drawControls(); }
+    if (state.mode === 'sleepy') drawSleepy();
+    if (state.mode === 'reveal') drawReveal();
     if (fade) {
       ctx.fillStyle = 'rgba(15,10,30,' + Math.max(0, 1 - Math.abs(fade.t / fade.dur * 2 - 1)) + ')';
       ctx.fillRect(0, 0, W, H);
