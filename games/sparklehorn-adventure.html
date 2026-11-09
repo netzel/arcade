@@ -510,6 +510,9 @@
     return g;
   };
 
+  // The horn is the close-up, high-risk attack, so it hits much harder than a bolt.
+  SPK.hornDamage = function (state) { return state.powers.mighty ? 5 : 3; };
+
   SPK.enemyHit = function (state, raw) {
     return Math.max(1, Math.min(raw, SPK.DIFF[state.difficulty].maxHit));
   };
@@ -572,8 +575,9 @@
       var role = 'none';
       for (var b = 0; b < BUTTONS.length; b++) if (inCircle(L[BUTTONS[b]], x, y)) { role = BUTTONS[b]; break; }
       if (role === 'none' && inRect(L.joyZone, x, y) && !joyOwner()) role = 'joy';
+      else if (role === 'none') role = 'tap'; // anywhere else: a quick tap walks you there
       ptrs[id] = { role: role, x0: x, y0: y, x: x, y: y, t0: t, t: t, maxD: 0 };
-      if (role !== 'none' && role !== 'joy') presses[role] = true;
+      if (role !== 'none' && role !== 'joy' && role !== 'tap') presses[role] = true;
       return role;
     };
     api.move = function (id, x, y, t) {
@@ -584,7 +588,9 @@
     api.up = function (id, x, y, t) {
       var p = ptrs[id]; if (!p) return;
       api.move(id, x, y, t);
-      if (p.role === 'joy' && t - p.t0 <= TAP_MS && p.maxD < TAP_PX) tap = { x: p.x0, y: p.y0 };
+      // Little fingers tap slowly: outside the joystick area there's nothing else a hold could mean.
+      var limit = p.role === 'tap' ? 600 : TAP_MS;
+      if ((p.role === 'joy' || p.role === 'tap') && t - p.t0 <= limit && p.maxD < TAP_PX) tap = { x: p.x0, y: p.y0 };
       delete ptrs[id];
     };
     api.cancel = function (id) { delete ptrs[id]; };
@@ -687,6 +693,8 @@
   function resetInput(reason) { if (input) input.resetAll(reason); keys = {}; keyPress = {}; walkTo = null; }
   function now() { return performance.now(); }
 
+  window.addEventListener('pointerdown', function () { audio(); }, true);
+  window.addEventListener('keydown', function () { audio(); }, true);
   canvas.addEventListener('pointerdown', function (e) {
     e.preventDefault();
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
@@ -735,7 +743,7 @@
 
   // ── World ────────────────────────────────────────────────────────────
   var map = null, chunks = {}, CHUNK = 16;
-  var doorArmed = false, fade = null, exploreT = 0, clock = 0;
+  var doorArmed = false, fade = null, exploreT = 0, clock = 0, moving = false;
   var BODY_R = TILE * 0.32;
 
   function loadMap(id) {
@@ -940,10 +948,10 @@
     state.x = res.x; state.y = res.y;
     onHornContact(res.hit);
     burst(state.x, state.y, 1, ['#f0abfc', '#ffffff'], 20);
-    var dmg = state.powers.mighty ? 2 : 1;
+    var dmg = SPK.hornDamage(state);
     for (var i = 0; i < enemies.length; i++) {
       var e = enemies[i];
-      if (e.hp > 0 && h.hit.indexOf(e) < 0 && Math.hypot(e.x - state.x, e.y - state.y) < TILE * 0.8) { h.hit.push(e); hurtEnemy(e, dmg); }
+      if (e.hp > 0 && h.hit.indexOf(e) < 0 && Math.hypot(e.x - state.x, e.y - state.y) < TILE * 0.95) { h.hit.push(e); hurtEnemy(e, dmg); }
     }
     if (h.t >= h.dur) horn.dash = null;
   }
@@ -1007,7 +1015,6 @@
     sfx('fanfare');
   }
   function onEnemyPopped(e) { /* quests/hints: later task */ }
-  function sfx(name) { /* sound arrives with the audio task */ }
 
 
   // ── Touching things: campfires, the power pedestal ───────────────────
@@ -1213,6 +1220,84 @@
     }
   }
 
+  // ── Sound: strictly best-effort. Nothing here may ever block input. ──
+  var actx = null;
+  function audio() {
+    try {
+      if (!actx) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        actx = new AC();
+      }
+      if (actx.state !== 'running' && actx.state !== 'closed') {
+        var p = actx.resume();
+        if (p && p.catch) p.catch(function () {});
+      }
+    } catch (e) { /* no sound this time */ }
+    return actx;
+  }
+  function tone(freq, opts) { try { playTone(freq, opts || {}); } catch (e) { /* no sound */ } }
+  function playTone(freq, o) {
+    var a = actx; if (!a || a.state === 'closed') return;
+    var t = a.currentTime + (o.at || 0), dur = o.dur || 0.12, vol = o.vol || 0.12;
+    var osc = a.createOscillator(), g = a.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    if (o.slide) osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq + o.slide), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(a.destination);
+    osc.start(t); osc.stop(t + dur + 0.02);
+  }
+  var lastSfx = {};
+  function sfx(name) {
+    try {
+      if (!actx || actx.state !== 'running') return;
+      var t = actx.currentTime;
+      if (lastSfx[name] && t - lastSfx[name] < 0.04) return; // don't stack the same sound
+      lastSfx[name] = t;
+      switch (name) {
+        case 'pop': tone(520, { dur: 0.08, type: 'triangle', vol: 0.16, slide: 500 }); tone(1040, { at: 0.05, dur: 0.1, vol: 0.08 }); break;
+        case 'bonk': tone(300, { dur: 0.07, type: 'square', vol: 0.05, slide: -120 }); break;
+        case 'sparkle': tone(1320, { dur: 0.06, vol: 0.05 }); tone(1760, { at: 0.03, dur: 0.06, vol: 0.04 }); break;
+        case 'whoosh': tone(220, { dur: 0.18, type: 'sawtooth', vol: 0.04, slide: 440 }); break;
+        case 'gem': tone(1568, { dur: 0.07, vol: 0.06 }); tone(2093, { at: 0.04, dur: 0.08, vol: 0.05 }); break;
+        case 'heal': [659, 784, 988].forEach(function (f, i) { tone(f, { at: i * 0.06, dur: 0.12, vol: 0.07 }); }); break;
+        case 'hurt': tone(330, { dur: 0.16, type: 'triangle', vol: 0.12, slide: -160 }); break;
+        case 'yawn': tone(440, { dur: 0.7, type: 'sine', vol: 0.1, slide: -220 }); break;
+        case 'crumble': for (var i = 0; i < 5; i++) tone(120 + Math.random() * 80, { at: i * 0.04, dur: 0.1, type: 'square', vol: 0.05 }); break;
+        case 'crackle': tone(880, { dur: 0.05, type: 'square', vol: 0.03 }); tone(660, { at: 0.08, dur: 0.05, type: 'square', vol: 0.03 }); tone(523, { at: 0.12, dur: 0.3, vol: 0.08 }); break;
+        case 'chime': [784, 988, 1175].forEach(function (f, i) { tone(f, { at: i * 0.07, dur: 0.18, vol: 0.08 }); }); break;
+        case 'power': [523, 659, 784, 1047].forEach(function (f, i) { tone(f, { at: i * 0.05, dur: 0.14, type: 'triangle', vol: 0.09 }); }); break;
+        case 'fanfare': [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) { tone(f, { at: i * 0.11, dur: i === 5 ? 0.5 : 0.14, type: 'triangle', vol: 0.11 }); }); break;
+      }
+    } catch (e) { /* no sound */ }
+  }
+
+  // Gentle looping music, scheduled a little ahead from the frame loop
+  // (so it stops with the arcade's pause like everything else).
+  var SONGS = {
+    meadow: { step: 0.32, notes: [523, 659, 784, 659, 587, 698, 880, 698, 523, 659, 784, 1047, 988, 784, 659, 587], bass: [262, 262, 349, 349, 262, 262, 392, 392] },
+    cave:   { step: 0.42, notes: [440, 523, 659, 523, 494, 587, 698, 587, 440, 523, 659, 880, 784, 659, 523, 494], bass: [220, 220, 175, 175, 220, 220, 165, 165] },
+  };
+  var music = { song: null, i: 0, next: 0 };
+  function updateMusic() {
+    try {
+      if (!actx || actx.state !== 'running' || !map || state.mode === 'title' || state.mode === 'choose') return;
+      var want = map.cave ? 'cave' : 'meadow';
+      if (music.song !== want) { music.song = want; music.i = 0; music.next = actx.currentTime + 0.1; }
+      var s = SONGS[want];
+      if (music.next < actx.currentTime - 1) music.next = actx.currentTime + 0.05; // after a pause, don't burst-catch-up
+      while (music.next < actx.currentTime + 0.3) {
+        var at = music.next - actx.currentTime;
+        tone(s.notes[music.i % s.notes.length], { at: at, dur: s.step * 0.9, type: 'sine', vol: 0.025 });
+        if (music.i % 2 === 0) tone(s.bass[(music.i / 2) % s.bass.length], { at: at, dur: s.step * 1.8, type: 'triangle', vol: 0.02 });
+        music.i++; music.next += s.step;
+      }
+    } catch (e) { /* no music */ }
+  }
+
   // ── Camera ───────────────────────────────────────────────────────────
   function clampCam(x, y) {
     var hw = W / 2 / scale, hh = H / 2 / scale, mw = map.w * TILE, mh = map.h * TILE;
@@ -1259,6 +1344,7 @@
       var dx = walkTo.x - state.x, dy = walkTo.y - state.y, d = Math.hypot(dx, dy);
       if (d < 4) walkTo = null; else v = { x: dx / d, y: dy / d };
     }
+    moving = !!(v.x || v.y);
     if (v.x || v.y) {
       var res = SPK.moveAndSlide(map, { x: state.x, y: state.y, r: BODY_R }, v.x * SPEED * dt, v.y * SPEED * dt, collideCtx());
       if (walkTo && res.hit.length && Math.hypot(res.x - state.x, res.y - state.y) < 0.5) walkTo = null;
@@ -1475,7 +1561,8 @@
     }
     if ((state.fx.invulnUntil || 0) > now() && Math.floor(now() / 200) % 2) ctx.globalAlpha = 0.35; // 2.5 Hz blink
     if (Math.cos(state.facing) > 0.1) ctx.scale(-1, 1); // the emoji faces left
-    if (horn.dash) ctx.rotate(-0.25);
+    if (horn.dash) { ctx.rotate(-0.25); ctx.scale(1.15, 0.9); }
+    else if (moving) ctx.translate(0, -Math.abs(Math.sin(clock * 12)) * 3);
     emoji('🦄', 0, 0, TILE * 1.1);
     ctx.restore();
   }
@@ -1621,6 +1708,7 @@
       last = t;
       frames++;
       update(dt);
+      updateMusic();
       draw();
     } catch (e) {
       errors++;
@@ -1636,6 +1724,7 @@
     get pops() { return stats.pops; },
     get inputs() { return { active: input.active(), lastReset: input.lastReset, move: input.moveVec() }; },
     layout: function () { return input.layout(); },
+    view: function () { return { camX: cam.x, camY: cam.y, scale: scale }; },
     _teleport: function (mapId, tx, ty) { teleport(mapId, tx, ty); },
     _spawn: function (kind, tx, ty) { spawnEnemy(kind, (tx + 0.5) * TILE, (ty + 0.5) * TILE, null); },
     _clearEnemies: function () { enemies = []; spores = []; },

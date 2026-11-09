@@ -597,4 +597,28 @@ test('save stays small', () => {
   assert.ok(n < 4000, `save is ${n} chars`);
 });
 
+test('the horn is the strong close-up attack: one hit pops slimes and mushrooms', () => {
+  const g = SPK.createGame('normal');
+  assert.ok(SPK.hornDamage(g) >= SPK.ENEMIES.mushroom.hp);
+  assert.ok(SPK.hornDamage(g) >= SPK.ENEMIES.slime.hp);
+  assert.ok(SPK.hornDamage(g) > 1, 'stronger than a magic bolt');
+  g.powers.mighty = true;
+  assert.ok(SPK.hornDamage(g) >= SPK.ENEMIES.slimeBig.hp, 'Mighty Horn pops even big slimes');
+});
+
+test('a tap anywhere that is not a button walks you there (not just in the joystick area)', () => {
+  const L = LAND();
+  const inp = SPK.createInput(L);
+  const spots = [{ x: 400, y: 20 }, { x: 700, y: 120 }, { x: 60, y: 30 }];
+  for (const p of spots) {
+    inp.down(1, p.x, p.y, 0);
+    inp.up(1, p.x, p.y, 80);
+    assert.deepEqual({ ...inp.consumeTap() }, p);
+  }
+  // but a drag up there is not a joystick and not a tap
+  inp.down(2, 400, 20, 0); inp.move(2, 460, 20, 50); inp.up(2, 460, 20, 90);
+  assert.equal(inp.consumeTap(), null);
+  assert.deepEqual({ ...inp.moveVec() }, { x: 0, y: 0 });
+});
+
 export { SPK, near };
