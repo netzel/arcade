@@ -388,6 +388,56 @@
     return SPK.fanAngles(aim, SPK.hasPowerup(state, 'starBurst', nowMs) ? 5 : 1, 50);
   };
 
+  // ── Chests, heart pieces ─────────────────────────────────────────────
+  SPK.CHESTS = {
+    'meadow:C:4,28':  { gems: 15 },             // behind the cracked boulder
+    'meadow:C:44,4':  { gems: 6 },
+    'meadow:C:40,28': { heartPiece: 'meadow:C:40,28' },
+    'meadow:C:20,12': { powerup: 'starBurst' },
+    'meadow:C:8,8':   { gems: 4 },
+    'meadow:C:44,16': { gems: 5 },
+    'meadow:C:28,18': { gems: 3 },
+    'meadow:C:16,29': { gems: 5 },
+    'pebble:C:6,3':   { gems: 8 },
+    'pebble:C:15,16': { powerup: 'swirl' },
+    'pebble:C:22,3':  { gems: 10 },
+  };
+
+  SPK.collectHeartPiece = function (state, id) {
+    if (state.heartPieces.indexOf(id) >= 0) return false;
+    state.heartPieces.push(id);
+    var before = state.hpMax;
+    state.hpMax = SPK.hpMaxFor(state);
+    if (state.hpMax > before) state.hp = Math.min(state.hpMax, state.hp + (state.hpMax - before));
+    return true;
+  };
+
+  SPK.openChest = function (state, id) {
+    if (state.chests.indexOf(id) >= 0) return null;
+    var c = SPK.CHESTS[id];
+    if (!c) return null;
+    state.chests.push(id);
+    if (c.gems) state.gems += c.gems;
+    if (c.heartPiece) SPK.collectHeartPiece(state, c.heartPiece);
+    return c;
+  };
+
+  // ── Where to go next (the hint trail) and what the bunny says ────────
+  SPK.BOULDER = 'meadow:B:7,27';
+  function goalAt(id) { var e = SPK.entity(id); return { map: id.split(':')[0], tx: e.tx, ty: e.ty }; }
+  SPK.nextGoal = function (state) {
+    if (!state.powers.mighty) return state.map === 'pebble' ? goalAt('pebble:P:27,11') : goalAt('meadow:D:24,5');
+    if (state.broken.indexOf(SPK.BOULDER) < 0) return state.map === 'pebble' ? goalAt('pebble:U:1,10') : goalAt(SPK.BOULDER);
+    return null;
+  };
+
+  SPK.CRITTER = { map: 'meadow', tx: 14, ty: 18, emoji: '🐰' };
+  SPK.critterHint = function (state) {
+    if (!state.powers.mighty) return { picture: ['🦄', '➡️', '🕳️', '✨'], text: 'Something magic is in Pebble Cave!' };
+    if (state.broken.indexOf(SPK.BOULDER) < 0) return { picture: ['🦄', '💥', '🪨', '🌳'], text: 'Bonk the cracked rock by the trees!' };
+    return { picture: ['🦄', '💖', '🗺️'], text: 'You did it! Keep exploring!' };
+  };
+
   SPK.enemyHit = function (state, raw) {
     return Math.max(1, Math.min(raw, SPK.DIFF[state.difficulty].maxHit));
   };
@@ -570,6 +620,7 @@
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     if (state.mode === 'intro') { state.mode = 'play'; introLeft = 0; return; }
     if (state.mode === 'reveal') { if (revealT > 1) { state.mode = 'play'; resetInput('reveal'); } return; }
+    if (speaker && Math.hypot(e.clientX - speaker.x, e.clientY - speaker.y) <= speaker.r + 8) { say(speaker.text); return; }
     input.down(e.pointerId, e.clientX, e.clientY, now());
   });
   canvas.addEventListener('pointermove', function (e) { input.move(e.pointerId, e.clientX, e.clientY, now()); });
@@ -875,7 +926,14 @@
     var id = boulderIdFrom(hits);
     if (id && state.powers.mighty) breakBoulder(id);
   }
-  function onDiscovery() { /* hint clock: later task */ }
+  var lastDiscovery = 0, trailUntil = 0, fliers = [], floaters = [];
+  function onDiscovery() { lastDiscovery = clock; trailUntil = 0; }
+  function flyGem(x, y, delay) { fliers.push({ x: x, y: y, t: -delay, vx: (Math.random() - 0.5) * 120, vy: -140 - Math.random() * 60 }); }
+  function heartPieceFx(x, y) {
+    burst(x, y, 24, ['#f43f5e', '#f9a8d4', '#ffffff'], 120);
+    floaters.push({ x: x, y: y - 10, t: 0, text: '💗', sub: (state.heartPieces.length % 4 || 4) + '/4' });
+    sfx('fanfare');
+  }
   function onEnemyPopped(e) { /* quests/hints: later task */ }
   function sfx(name) { /* sound arrives with the audio task */ }
 
@@ -884,10 +942,20 @@
   function touchThings() {
     for (var i = 0; i < map.entities.length; i++) {
       var e = map.entities[i];
-      if (e.kind !== 'F' && e.kind !== 'P') continue;
+      if (e.kind !== 'F' && e.kind !== 'P' && e.kind !== 'C' && e.kind !== 'H') continue;
       var x = (e.tx + 0.5) * TILE, y = (e.ty + 0.5) * TILE;
       if (Math.hypot(x - state.x, y - state.y) > TILE * 0.95) continue;
-      if (e.kind === 'F') {
+      if (e.kind === 'C') {
+        var c = SPK.openChest(state, e.id);
+        if (!c) continue;
+        sfx('chime'); onDiscovery();
+        burst(x, y - 6, 16, ['#fde047', '#fbbf24', '#ffffff'], 110);
+        if (c.gems) for (var g = 0; g < Math.min(c.gems, 12); g++) flyGem(x, y - 8, g * 0.05);
+        if (c.powerup) dropPickup(c.powerup, x, y);
+        if (c.heartPiece) heartPieceFx(x, y);
+      } else if (e.kind === 'H') {
+        if (SPK.collectHeartPiece(state, e.id)) { heartPieceFx(x, y); onDiscovery(); }
+      } else if (e.kind === 'F') {
         var hurt = state.hp < state.hpMax;
         var fresh = SPK.lightCampfire(state, e.id);
         if (fresh) { burst(x, y, 20, ['#fb923c', '#fde047', '#fca5a5'], 90); sfx('crackle'); onDiscovery(); }
@@ -979,6 +1047,100 @@
     });
   }
 
+
+  // ── Gems flying out of chests, heart-piece pop-ups ───────────────────
+  function updateFliers(dt) {
+    for (var i = fliers.length - 1; i >= 0; i--) {
+      var f = fliers[i];
+      f.t += dt;
+      if (f.t < 0) continue;
+      if (f.t < 0.45) { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 420 * dt; }
+      else { f.x += (state.x - f.x) * Math.min(1, dt * 9); f.y += (state.y - f.y) * Math.min(1, dt * 9); }
+      if (f.t > 0.8) { fliers.splice(i, 1); sfx('gem'); }
+    }
+    for (var j = floaters.length - 1; j >= 0; j--) { floaters[j].t += dt; if (floaters[j].t > 1.6) floaters.splice(j, 1); }
+  }
+  function drawFliers() {
+    fliers.forEach(function (f) {
+      if (f.t < 0) return;
+      ctx.save(); ctx.translate(f.x, f.y);
+      ctx.fillStyle = '#22d3ee'; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(4, 0); ctx.lineTo(0, 6); ctx.lineTo(-4, 0); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    });
+    floaters.forEach(function (f) {
+      ctx.globalAlpha = Math.min(1, 2 - f.t * 1.2);
+      emoji(f.text, f.x, f.y - f.t * 26, TILE * 0.9);
+      ctx.fillStyle = '#9f1239'; ctx.font = '700 12px Fredoka, ui-rounded, system-ui, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(f.sub, f.x, f.y - f.t * 26 + TILE * 0.6);
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  // ── Hint trail: sparkles pointing toward the next big thing ──────────
+  function trailOn() {
+    var d = SPK.DIFF[state.difficulty];
+    if (clock < trailUntil) return true;
+    return d.hintAfter != null && clock - lastDiscovery > d.hintAfter;
+  }
+  function drawTrail() {
+    if (!trailOn()) return;
+    var goal = SPK.nextGoal(state);
+    if (!goal || goal.map !== map.id) return;
+    var gx = (goal.tx + 0.5) * TILE, gy = (goal.ty + 0.5) * TILE;
+    var dx = gx - state.x, dy = gy - state.y, d = Math.hypot(dx, dy);
+    if (d < TILE * 1.5) return;
+    var ux = dx / d, uy = dy / d, maxD = Math.min(d - TILE, 8 * TILE), step = TILE * 0.8;
+    var phase = (clock * 1.5) % 1;
+    for (var k = 0; (k + phase) * step < maxD; k++) {
+      var t = (k + phase) * step, a = Math.max(0, 1 - t / maxD) * (0.55 + 0.45 * Math.sin(clock * 6 + k));
+      var x = state.x + ux * (t + TILE * 0.6), y = state.y + uy * (t + TILE * 0.6);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = 'rgba(250,204,21,.45)'; ctx.beginPath(); ctx.arc(x, y, 8, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(x, y, 4.5, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 8, y - 1, 16, 2); ctx.fillRect(x - 1, y - 8, 2, 16);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ── The bunny's picture bubble (with optional read-aloud) ────────────
+  var speaker = null;
+  var canSpeak = (function () { try { return 'speechSynthesis' in window && typeof SpeechSynthesisUtterance === 'function'; } catch (e) { return false; } })();
+  function say(text) {
+    try {
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.9; u.pitch = 1.2;
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* no voice this time */ }
+  }
+  function drawBubble() {
+    if (map.id !== SPK.CRITTER.map) return;
+    var bx = (SPK.CRITTER.tx + 0.5) * TILE, by = (SPK.CRITTER.ty + 0.5) * TILE;
+    if (Math.hypot(bx - state.x, by - state.y) > 3 * TILE) return;
+    var hint = SPK.critterHint(state);
+    var sx = W / 2 + (bx - cam.x) * scale, sy = H / 2 + (by - cam.y) * scale;
+    var e = Math.max(26, Math.min(40, W / 22)), n = hint.picture.length;
+    ctx.font = '600 ' + Math.round(e * 0.38) + 'px Fredoka, ui-rounded, system-ui, sans-serif';
+    var spk = canSpeak ? e + 6 : 0;
+    var w = Math.max(n * e * 1.15 + 24 + spk, ctx.measureText(hint.text).width + 32), h = e * 1.5 + 22;
+    var pad = (w - spk - n * e * 1.15) / 2;
+    var x = Math.max(8, Math.min(W - w - 8, sx - w / 2)), y = Math.max(8, sy - TILE * scale * 0.7 - h - 10);
+    ctx.fillStyle = 'rgba(255,255,255,.95)'; roundRect(x, y, w, h, 18); ctx.fill();
+    ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    ctx.beginPath(); ctx.moveTo(sx - 8, y + h - 1); ctx.lineTo(sx + 8, y + h - 1); ctx.lineTo(sx, y + h + 10); ctx.closePath(); ctx.fill();
+    for (var i = 0; i < n; i++) emoji(hint.picture[i], x + pad + e * 0.575 + i * e * 1.15, y + e * 0.75 + 4, e);
+    ctx.fillStyle = '#5b21b6'; ctx.font = '600 ' + Math.round(e * 0.38) + 'px Fredoka, ui-rounded, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(hint.text, x + w / 2, y + h - 12);
+    if (canSpeak) {
+      var spx = x + w - e * 0.5 - 10, spy = y + h / 2;
+      ctx.fillStyle = '#ede9fe'; ctx.beginPath(); ctx.arc(spx, spy, e * 0.5, 0, 7); ctx.fill();
+      emoji('🔊', spx, spy + 1, e * 0.6);
+      speaker = { x: spx, y: spy, r: e * 0.5, text: hint.text };
+    }
+  }
+
   // ── Camera ───────────────────────────────────────────────────────────
   function clampCam(x, y) {
     var hw = W / 2 / scale, hh = H / 2 / scale, mw = map.w * TILE, mh = map.h * TILE;
@@ -1047,7 +1209,8 @@
     updateEnemies(dt);
     updateSwirl();
     updatePickups(dt);
-    pressed('map');
+    if (pressed('map')) { trailUntil = clock + 8; sfx('sparkle'); }
+    updateFliers(dt);
     var c = clampCam(state.x, state.y);
     var k = Math.min(1, dt * 10);
     cam.x += (c.x - cam.x) * k; cam.y += (c.y - cam.y) * k;
@@ -1187,6 +1350,8 @@
       ctx.fillRect(tx * TILE + 6 + Math.sin(ph) * 4, ty * TILE + 10 + hash(ty, tx) * 12, 9, 2);
     }
     drawEntities(tx0, ty0, tx1, ty1);
+    drawTrail();
+    if (map.id === SPK.CRITTER.map) emoji(SPK.CRITTER.emoji, (SPK.CRITTER.tx + 0.5) * TILE, (SPK.CRITTER.ty + 0.5) * TILE - Math.abs(Math.sin(clock * 3)) * 4, TILE * 0.8);
   }
 
   function emoji(ch, x, y, size) {
@@ -1297,6 +1462,7 @@
     }
     if (!drewPlayer) drawPlayer();
     drawSwirl();
+    drawFliers();
     spores.forEach(function (p) {
       ctx.fillStyle = 'rgba(190,242,100,.85)'; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fill();
       ctx.strokeStyle = '#65a30d'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -1365,7 +1531,8 @@
       g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
-    if (state.mode === 'play') { drawHUD(); drawPowerTimers(); drawControls(); }
+    speaker = null;
+    if (state.mode === 'play') { drawBubble(); drawHUD(); drawPowerTimers(); drawControls(); }
     if (state.mode === 'sleepy') drawSleepy();
     if (state.mode === 'reveal') drawReveal();
     if (fade) {

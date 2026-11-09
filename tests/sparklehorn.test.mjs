@@ -461,4 +461,63 @@ test('star burst makes magic fire 5 bolts', () => {
   assert.equal(SPK.fireMagic(g, 0, 16000).length, 1, 'back to one when it runs out');
 });
 
+// ── Task 8: chests, heart pieces, hints ─────────────────────────────────
+test('every chest has contents and every contents entry is a real chest', () => {
+  const chestIds = [];
+  for (const id of REAL_MAPS) for (const e of SPK.parseMap(id).entities) if (e.kind === 'C') chestIds.push(e.id);
+  for (const id of chestIds) assert.ok(SPK.CHESTS[id], `${id} has contents`);
+  for (const id of Object.keys(SPK.CHESTS)) assert.ok(chestIds.includes(id), `${id} is on a map`);
+  const kinds = Object.values(SPK.CHESTS).map((c) => Object.keys(c)[0]);
+  assert.equal(kinds.filter((k) => k === 'powerup').length, 2, 'one Star Burst in the meadow, one Swirl in the cave');
+  assert.equal(SPK.CHESTS['pebble:C:15,16'].powerup, 'swirl');
+});
+
+test('openChest is once-only and adds gems', () => {
+  const g = SPK.createGame('normal');
+  const gemChest = Object.keys(SPK.CHESTS).find((id) => SPK.CHESTS[id].gems);
+  const c = SPK.openChest(g, gemChest);
+  assert.equal(c.gems, SPK.CHESTS[gemChest].gems);
+  assert.equal(g.gems, c.gems);
+  assert.equal(SPK.openChest(g, gemChest), null);
+  assert.equal(g.gems, c.gems);
+  assert.deepEqual(Array.from(g.chests), [gemChest]);
+});
+
+test('four heart pieces raise hpMax by one heart and fill it', () => {
+  const g = SPK.createGame('normal');
+  const spots = SPK.parseMap('meadow').entities.filter((e) => e.kind === 'H').map((e) => e.id);
+  spots.forEach((id) => assert.equal(SPK.collectHeartPiece(g, id), true));
+  assert.equal(SPK.collectHeartPiece(g, spots[0]), false, 'once only');
+  assert.equal(g.hpMax, 8);
+  const heartChest = Object.keys(SPK.CHESTS).find((id) => SPK.CHESTS[id].heartPiece);
+  SPK.openChest(g, heartChest);
+  assert.equal(g.heartPieces.length, 4);
+  assert.equal(g.hpMax, 10);
+  assert.equal(g.hp, 10);
+});
+
+test('nextGoal leads from the cave door to the pedestal to the boulder, then rests', () => {
+  const g = SPK.createGame('easy');
+  const tile = (goal) => goal && `${goal.map}:${goal.tx},${goal.ty}`;
+  assert.equal(tile(SPK.nextGoal(g)), 'meadow:24,5');
+  g.map = 'pebble';
+  assert.equal(tile(SPK.nextGoal(g)), 'pebble:27,11');
+  g.powers.mighty = true;
+  assert.equal(tile(SPK.nextGoal(g)), 'pebble:1,10', 'head back out');
+  g.map = 'meadow';
+  assert.equal(tile(SPK.nextGoal(g)), 'meadow:7,27');
+  g.broken.push('meadow:B:7,27');
+  assert.equal(SPK.nextGoal(g), null);
+});
+
+test('the bunny says something different as you progress', () => {
+  const g = SPK.createGame('easy');
+  const a = SPK.critterHint(g).picture.join('');
+  g.powers.mighty = true;
+  const b = SPK.critterHint(g).picture.join('');
+  g.broken.push('meadow:B:7,27');
+  const c = SPK.critterHint(g).picture.join('');
+  assert.ok(a !== b && b !== c && a !== c);
+});
+
 export { SPK, near };
