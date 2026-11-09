@@ -438,6 +438,78 @@
     return { picture: ['🦄', '💖', '🗺️'], text: 'You did it! Keep exploring!' };
   };
 
+  // ── Saves ────────────────────────────────────────────────────────────
+  SPK.encodeBits = function (bits) {
+    var bytes = new Uint8Array(Math.ceil(bits.length / 8)), s = '';
+    for (var i = 0; i < bits.length; i++) if (bits[i]) bytes[i >> 3] |= 1 << (i & 7);
+    for (var j = 0; j < bytes.length; j++) s += String.fromCharCode(bytes[j]);
+    return btoa(s);
+  };
+  SPK.decodeBits = function (str, length) {
+    var s = atob(str), out = new Uint8Array(length);
+    for (var i = 0; i < length; i++) out[i] = (s.charCodeAt(i >> 3) >> (i & 7)) & 1;
+    return out;
+  };
+
+  function copyList(a) { return Array.prototype.slice.call(a || []); }
+
+  SPK.getSave = function (state) {
+    var T = SPK.TILE, map = state.map, tx = Math.floor(state.x / T), ty = Math.floor(state.y / T), hp = state.hp;
+    if (!(hp > 0)) { // saved mid-yawn: store where you'll wake up
+      var at = SPK.besideFire(state.wakeCampfire || SPK.HOME_FIRE);
+      map = at.map; tx = at.tx; ty = at.ty; hp = state.hpMax;
+    }
+    var explored = {};
+    for (var id in state.explored) if (state.explored[id] && SPK.MAPS[id]) explored[id] = SPK.encodeBits(state.explored[id]);
+    var powers = {};
+    for (var k in state.powers) if (state.powers[k]) powers[k] = true;
+    return {
+      v: 1, difficulty: state.difficulty, map: map, x: tx, y: ty, facing: +(state.facing || 0).toFixed(2), hp: hp,
+      gems: state.gems, powers: powers, chests: copyList(state.chests), friends: copyList(state.friends),
+      heartPieces: copyList(state.heartPieces), campfires: copyList(state.campfires), wakeCampfire: state.wakeCampfire,
+      bossBeaten: !!state.bossBeaten, broken: copyList(state.broken), explored: explored,
+      closet: { owned: copyList(state.closet && state.closet.owned), wearing: (state.closet && state.closet.wearing) || {} },
+    };
+  };
+
+  function bad(field) { throw new Error('bad save: ' + field); }
+  function isInt(n) { return typeof n === 'number' && Math.floor(n) === n; }
+  function strList(a) { if (!Array.isArray(a)) return false; for (var i = 0; i < a.length; i++) if (typeof a[i] !== 'string') return false; return true; }
+
+  SPK.validateSave = function (s) {
+    if (!s || typeof s !== 'object') bad('not an object');
+    if (s.v !== 1) bad('v');
+    if (!SPK.DIFF[s.difficulty]) bad('difficulty');
+    if (typeof s.map !== 'string' || !Object.prototype.hasOwnProperty.call(SPK.MAPS, s.map)) bad('map');
+    ['chests', 'friends', 'heartPieces', 'campfires', 'broken'].forEach(function (k) { if (!strList(s[k])) bad(k); });
+    var m = SPK.parseMap(s.map);
+    if (!isInt(s.x) || !isInt(s.y) || SPK.isSolid(m, s.x, s.y, { broken: s.broken, powers: s.powers || {} })) bad('position');
+    var hpMax = SPK.DIFF[s.difficulty].hp + 2 * Math.floor(s.heartPieces.length / 4);
+    if (!isInt(s.hp) || s.hp < 1 || s.hp > hpMax) bad('hp');
+    if (!isInt(s.gems) || s.gems < 0) bad('gems');
+    if (!s.powers || typeof s.powers !== 'object') bad('powers');
+    if (typeof s.wakeCampfire !== 'string' || !SPK.MAPS[s.wakeCampfire.split(':')[0]] || !SPK.entity(s.wakeCampfire)) bad('wakeCampfire');
+    if (!s.explored || typeof s.explored !== 'object') bad('explored');
+    for (var id in s.explored) if (!SPK.MAPS[id] || typeof s.explored[id] !== 'string') bad('explored');
+    return s;
+  };
+
+  SPK.applySave = function (s) {
+    var g = SPK.createGame(s.difficulty), T = SPK.TILE;
+    g.map = s.map; g.x = (s.x + 0.5) * T; g.y = (s.y + 0.5) * T; g.facing = +s.facing || 0;
+    g.gems = s.gems; g.powers = {};
+    for (var k in s.powers) if (s.powers[k]) g.powers[k] = true;
+    g.chests = copyList(s.chests); g.friends = copyList(s.friends); g.heartPieces = copyList(s.heartPieces);
+    g.campfires = copyList(s.campfires); g.broken = copyList(s.broken);
+    g.wakeCampfire = s.wakeCampfire; g.bossBeaten = !!s.bossBeaten;
+    g.hpMax = SPK.hpMaxFor(g); g.hp = Math.min(s.hp, g.hpMax);
+    g.explored = {};
+    for (var id in s.explored) { var m = SPK.parseMap(id); g.explored[id] = SPK.decodeBits(s.explored[id], m.w * m.h); }
+    if (s.closet && typeof s.closet === 'object') g.closet = { owned: copyList(s.closet.owned), wearing: s.closet.wearing || {} };
+    g.mode = 'welcome';
+    return g;
+  };
+
   SPK.enemyHit = function (state, raw) {
     return Math.max(1, Math.min(raw, SPK.DIFF[state.difficulty].maxHit));
   };
@@ -1520,6 +1592,7 @@
     ctx.fillStyle = map && map.cave ? '#1c1714' : '#2f9e44';
     ctx.fillRect(0, 0, W, H);
     if (!map || state.mode === 'title' || state.mode === 'choose') return;
+    // (welcome, intro, sleepy, reveal and play all draw the world)
     ctx.save();
     ctx.translate(Math.round(W / 2), Math.round(H / 2)); ctx.scale(scale, scale); ctx.translate(-cam.x, -cam.y);
     if (shake > 0) ctx.translate((Math.random() - 0.5) * 8 * shake / 0.12, (Math.random() - 0.5) * 8 * shake / 0.12);
@@ -1569,6 +1642,31 @@
     _give: function (kind) { if (SPK.POWERUPS[kind]) SPK.grantPowerup(state, kind, now()); else state.powers[kind] = true; },
     get enemies() { return enemies.length; },
   };
+
+  // ── Saves (through the arcade) ───────────────────────────────────────
+  function getState() {
+    if (state.mode === 'title' || state.mode === 'choose') return null;
+    return SPK.getSave(state);
+  }
+  function setState(saved) {
+    var next = SPK.applySave(SPK.validateSave(saved)); // throws on anything odd: the arcade starts fresh
+    state = next;
+    map = null;
+    show('title', false); show('diff', false); show('welcome', true);
+    resetInput('restore');
+  }
+  onTap($('resume'), function () {
+    if (state.mode !== 'welcome') return;
+    state.mode = 'play';
+    show('welcome', false);
+    onDiscovery();
+    resetInput('resume');
+  });
+  if (window.ArcadeBridge) {
+    // A save is on its way: skip the title so it never flashes up.
+    try { if (ArcadeBridge.peekRestore && ArcadeBridge.peekRestore(1)) show('title', false); } catch (e) { /* ignore */ }
+    ArcadeBridge.register({ version: 1, getState: getState, setState: setState });
+  }
 
   resize();
   requestAnimationFrame(frame);

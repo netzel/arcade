@@ -520,4 +520,81 @@ test('the bunny says something different as you progress', () => {
   assert.ok(a !== b && b !== c && a !== c);
 });
 
+// ── Task 9: saves ───────────────────────────────────────────────────────
+function playedGame() {
+  const g = SPK.createGame('normal');
+  g.powers.mighty = true;
+  SPK.openChest(g, 'meadow:C:8,8');
+  SPK.openChest(g, 'meadow:C:40,28');
+  g.gems = 17;
+  SPK.collectHeartPiece(g, 'meadow:H:3,3');
+  SPK.lightCampfire(g, 'meadow:F:38,10');
+  g.broken.push('meadow:B:7,27');
+  g.map = 'pebble'; g.x = 10.5 * SPK.TILE; g.y = 9.5 * SPK.TILE; g.hp = 5;
+  const m = SPK.parseMap('pebble');
+  g.explored.pebble = new Uint8Array(m.w * m.h);
+  [0, 7, 8, 9, 100, 599].forEach((i) => { g.explored.pebble[i] = 1; });
+  g.mode = 'play';
+  return g;
+}
+
+test('explored bits survive encode/decode', () => {
+  const a = new Uint8Array(37); [0, 1, 8, 15, 36].forEach((i) => { a[i] = 1; });
+  assert.deepEqual(Array.from(SPK.decodeBits(SPK.encodeBits(a), 37)), Array.from(a));
+});
+
+test('save round-trip keeps everything you found', () => {
+  const g = playedGame();
+  const save = JSON.parse(JSON.stringify(SPK.getSave(g)));
+  const back = SPK.applySave(SPK.validateSave(save));
+  assert.equal(back.mode, 'welcome');
+  for (const k of ['difficulty', 'map', 'hp', 'hpMax', 'gems', 'wakeCampfire', 'bossBeaten']) assert.deepEqual(back[k], g[k], k);
+  for (const k of ['chests', 'friends', 'heartPieces', 'campfires', 'broken']) assert.deepEqual(Array.from(back[k]), Array.from(g[k]), k);
+  assert.equal(back.powers.mighty, true);
+  assert.equal(back.x, g.x); assert.equal(back.y, g.y);
+  assert.deepEqual(Array.from(back.explored.pebble), Array.from(g.explored.pebble));
+});
+
+test('a save made while sleepy wakes you at your campfire instead of breaking', () => {
+  const g = playedGame();
+  g.hp = 0; g.mode = 'sleepy';
+  const save = JSON.parse(JSON.stringify(SPK.getSave(g)));
+  const back = SPK.applySave(SPK.validateSave(save));
+  assert.equal(back.hp, back.hpMax);
+  assert.equal(back.map, 'meadow');
+  assert.equal(back.gems, 17);
+});
+
+test('power-ups are not saved', () => {
+  const g = playedGame();
+  SPK.grantPowerup(g, 'starBurst', 0);
+  assert.equal(JSON.stringify(SPK.getSave(g)).includes('starBurst'), false);
+});
+
+const bad = (mut) => { const s = JSON.parse(JSON.stringify(SPK.getSave(playedGame()))); mut(s); return s; };
+test('validateSave rejects a wrong version', () => {
+  assert.throws(() => SPK.validateSave(bad((s) => { s.v = 2; })), /bad save: v/);
+});
+test('validateSave rejects an unknown map', () => {
+  assert.throws(() => SPK.validateSave(bad((s) => { s.map = 'moon'; })), /bad save: map/);
+});
+test('validateSave rejects a position inside a wall', () => {
+  assert.throws(() => SPK.validateSave(bad((s) => { s.x = 0; s.y = 0; })), /bad save: position/);
+});
+test('validateSave rejects non-array chests', () => {
+  assert.throws(() => SPK.validateSave(bad((s) => { s.chests = 'all of them'; })), /bad save: chests/);
+});
+test('validateSave rejects nonsense hearts and difficulty', () => {
+  assert.throws(() => SPK.validateSave(bad((s) => { s.hp = 99; })), /bad save: hp/);
+  assert.throws(() => SPK.validateSave(bad((s) => { s.difficulty = 'hard'; })), /bad save: difficulty/);
+  assert.throws(() => SPK.validateSave(null), /bad save/);
+});
+
+test('save stays small', () => {
+  const g = playedGame();
+  for (const id of ['meadow', 'pebble']) { const m = SPK.parseMap(id); g.explored[id] = new Uint8Array(m.w * m.h).fill(1); }
+  const n = JSON.stringify(SPK.getSave(g)).length;
+  assert.ok(n < 4000, `save is ${n} chars`);
+});
+
 export { SPK, near };
