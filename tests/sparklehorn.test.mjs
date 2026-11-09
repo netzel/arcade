@@ -176,4 +176,138 @@ test('layout: buttons do not overlap each other or the arcade menu corner', () =
   }
 });
 
+// ── Task 4: maps & collision ────────────────────────────────────────────
+const REAL_MAPS = ['meadow', 'pebble'];
+
+test('maps parse with consistent widths', () => {
+  for (const id of REAL_MAPS) {
+    const rows = SPK.MAPS[id].rows;
+    const m = SPK.parseMap(id);
+    assert.equal(m.h, rows.length);
+    for (const r of rows) assert.equal(r.length, m.w, `${id} row width`);
+    const starts = m.entities.filter((e) => e.kind === (id === 'meadow' ? '@' : 'U'));
+    assert.equal(starts.length, 1, `${id} has one start`);
+  }
+  assert.equal(SPK.parseMap('meadow').w, 48);
+  assert.equal(SPK.parseMap('meadow').h, 32);
+  assert.equal(SPK.parseMap('pebble').w, 30);
+  assert.equal(SPK.parseMap('pebble').h, 20);
+});
+
+test('entity ids are stable and unique', () => {
+  const ids = new Set();
+  for (const id of REAL_MAPS) {
+    for (const e of SPK.parseMap(id).entities) {
+      assert.equal(e.id, `${id}:${e.kind}:${e.tx},${e.ty}`);
+      assert.ok(!ids.has(e.id), `duplicate ${e.id}`);
+      ids.add(e.id);
+    }
+  }
+});
+
+test('every door has a matching return door', () => {
+  const doors = [];
+  for (const id of REAL_MAPS) for (const e of SPK.parseMap(id).entities) if (e.kind === 'D' || e.kind === 'U') doors.push(e.id);
+  assert.ok(doors.length >= 2);
+  for (const d of doors) {
+    const link = SPK.DOORS[d];
+    assert.ok(link, `door ${d} has a link`);
+    assert.ok(doors.includes(link.at), `${d} -> ${link.at} exists`);
+    assert.equal(SPK.DOORS[link.at].at, d, `${link.at} links back to ${d}`);
+  }
+});
+
+test('moveAndSlide blocks walls and slides', () => {
+  SPK.MAPS.t5 = { rows: ['#####', '#...#', '#.#.#', '#...#', '#####'] };
+  const m = SPK.parseMap('t5');
+  const T = SPK.TILE;
+  const ctx = { broken: [], powers: {} };
+  // in tile (1,1), push right into nothing solid, then down-right into the centre rock (2,2)
+  const start = { x: 1.5 * T, y: 1.5 * T, r: T * 0.35 };
+  const a = SPK.moveAndSlide(m, start, T, 0, ctx);
+  assert.ok(a.x > start.x && a.y === start.y, 'free move right');
+  // from (1,1) push diagonally into the corner wall at top-left: x blocked, y blocked
+  const b = SPK.moveAndSlide(m, start, -T, -T, ctx);
+  assert.ok(b.x >= T + start.r - 1e-6 && b.y >= T + start.r - 1e-6, 'stopped by walls');
+  assert.ok(b.hit.length > 0);
+  // slide: push left (into wall) and down (free) at the same time -> only y changes
+  const c = SPK.moveAndSlide(m, start, -T, T * 0.4, ctx);
+  assert.ok(Math.abs(c.x - (T + start.r)) < 1e-6 && c.y > start.y, 'slides along the wall');
+});
+
+test('cracked boulder solid until broken', () => {
+  const m = SPK.parseMap('meadow');
+  const b = m.entities.find((e) => e.kind === 'B');
+  assert.ok(b, 'meadow has a cracked boulder');
+  assert.equal(SPK.isSolid(m, b.tx, b.ty, { broken: [], powers: {} }), true);
+  assert.equal(SPK.isSolid(m, b.tx, b.ty, { broken: [b.id], powers: {} }), false);
+  assert.equal(SPK.isSolid(m, -1, 0, { broken: [], powers: {} }), true, 'out of bounds is solid');
+});
+
+function flood(m, sx, sy, passBoulders) {
+  const seen = new Uint8Array(m.w * m.h);
+  const q = [[sx, sy]];
+  seen[sy * m.w + sx] = 1;
+  const ctx = { broken: passBoulders ? m.entities.filter((e) => e.kind === 'B').map((e) => e.id) : [], powers: {} };
+  while (q.length) {
+    const [x, y] = q.pop();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= m.w || ny >= m.h || seen[ny * m.w + nx]) continue;
+      if (SPK.isSolid(m, nx, ny, ctx)) continue;
+      seen[ny * m.w + nx] = 1;
+      q.push([nx, ny]);
+    }
+  }
+  return (e) => !!seen[e.ty * m.w + e.tx];
+}
+
+test('every chest, heart spot, campfire and the pedestal is reachable', () => {
+  const KEY = ['C', 'H', 'F', 'P', 'D', 'U'];
+  const meadow = SPK.parseMap('meadow');
+  const start = meadow.entities.find((e) => e.kind === '@');
+  const withB = flood(meadow, start.tx, start.ty, true);
+  const withoutB = flood(meadow, start.tx, start.ty, false);
+  const blocked = [];
+  for (const e of meadow.entities.filter((e) => KEY.includes(e.kind))) {
+    assert.ok(withB(e), `${e.id} reachable once boulders are broken`);
+    if (!withoutB(e)) blocked.push(e.id);
+  }
+  assert.equal(blocked.length, 1, `exactly one thing hides behind the boulder: ${blocked}`);
+  assert.ok(blocked[0].includes(':C:'), 'and it is a chest');
+  const pebble = SPK.parseMap('pebble');
+  const u = pebble.entities.find((e) => e.kind === 'U');
+  const r = flood(pebble, u.tx, u.ty, false);
+  for (const e of pebble.entities.filter((e) => KEY.includes(e.kind))) assert.ok(r(e), `${e.id} reachable`);
+});
+
+test('content counts match the design', () => {
+  const count = (id, k) => SPK.parseMap(id).entities.filter((e) => e.kind === k).length;
+  assert.equal(count('meadow', 'F'), 3);
+  assert.equal(count('meadow', 'C'), 8);
+  assert.equal(count('meadow', 'H'), 3);
+  assert.equal(count('meadow', 'S'), 6);
+  assert.equal(count('meadow', 'M'), 2);
+  assert.equal(count('meadow', 'B'), 1);
+  assert.equal(count('pebble', 'F'), 1);
+  assert.equal(count('pebble', 'C'), 3);
+  assert.equal(count('pebble', 'P'), 1);
+  assert.equal(count('pebble', 'S') + count('pebble', 'M'), 4);
+});
+
+test('createGame starts at the meadow start tile, waking at the home campfire', () => {
+  const g = SPK.createGame('easy');
+  const m = SPK.parseMap('meadow');
+  const s = m.entities.find((e) => e.kind === '@');
+  assert.equal(g.x, (s.tx + 0.5) * SPK.TILE);
+  assert.equal(g.y, (s.ty + 0.5) * SPK.TILE);
+  assert.equal(g.wakeCampfire, SPK.HOME_FIRE);
+  assert.ok(m.entities.some((e) => e.id === SPK.HOME_FIRE && e.kind === 'F'));
+});
+
+test('coming through a door you step straight out of it', () => {
+  assert.deepEqual({ ...SPK.doorArrival('pebble:U:1,10') }, { map: 'pebble', tx: 2, ty: 10 });
+  assert.deepEqual({ ...SPK.doorArrival('meadow:D:24,5') }, { map: 'meadow', tx: 24, ty: 6 });
+});
+
 export { SPK, near };

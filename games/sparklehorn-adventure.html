@@ -79,13 +79,185 @@
     normal: { hp: 8,  autoMagic: false, autoMagicEvery: 0.5, enemySpeed: 1,   enemyAtk: 1,   maxHit: 2, hintAfter: null, beetleMagicFull: false },
   };
 
+  // ── World maps (one character = one tile) ─────────────────────────
+  // . grass  , flowers  : path  T tree  ~ water  # rock  B cracked boulder
+  // D cave door  U cave exit  F campfire  C chest  H heart piece  S slimes
+  // M mushrooms  P power pedestal  @ start  = cave floor
+  SPK.MAPS = {
+    meadow: { name: 'Sunny Meadow', floor: '.', rows: [
+      'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+      'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+      'T...............,.#############.....,....,....TT',
+      'TT.H..............#############..,.............T',
+      'TT.........,..TT..#############,.,..........C.TT',
+      'TT...,TT.,.,,.......####D####.....TT.....,....TT',
+      'TT,...T......,......,...:.,........T...........T',
+      'TT......................:,.............,.TT...TT',
+      'T..,....C...............:.........S............T',
+      'T.......................:.,...............,...TT',
+      'T.....M,................:T...........,F...,...TT',
+      'T...........:::::::::::::.....,....,..........TT',
+      'TT..........:.......C.........M...,...,...S...TT',
+      'TT......,.TT:...............,....H.,........,..T',
+      'TT..........:....,.........,.........,.........T',
+      'T..TT.......:.....S........T..........TT......TT',
+      'T..,.,......:..,.................,..........C.TT',
+      'TT..........:.....,......,......,.............TT',
+      'T...........F.....,.........C......~~~........TT',
+      'TT.........,:...,..........,,...~~~~~~~~~......T',
+      'TT,.........@..................~~~~~~~~~~~....TT',
+      'T..............,.......,,,.....~~~~~~~~~~~.....T',
+      'TT...............TT..,.........~~~~~~~~~~~..T..T',
+      'T........S......,.T.............~~~~~~~~~..,...T',
+      'T......,..,,..............S.....,..~~~........TT',
+      'T.TTTTTT...............,......................TT',
+      'TTT....T....TT.,........,.....F.....,....S.....T',
+      'TTT....B......,........................,.,...,TT',
+      'TTT.C..T..,......,....TT.........T......C......T',
+      'T.T....T........C..........,.,.............,.H.T',
+      'T.TTTTTT...........,......,..................,TT',
+      'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+    ] },
+    pebble: { name: 'Pebble Cave', floor: '=', cave: true, rows: [
+      '##############################',
+      '##############################',
+      '#####=====##=====###=====#####',
+      '#####=C===##==M==###==C==#####',
+      '#####=====##=====###=====#####',
+      '#####=====##=============#####',
+      '#####=====##=============#####',
+      '#####=====##=====###=====#####',
+      '#=========##=====###=========#',
+      '#============S===#######=====#',
+      '#U===F===============###=====#',
+      '#=========####=======###===P=#',
+      '#=========####====M==###=====#',
+      '##############=======###=====#',
+      '##############===============#',
+      '##############===========S===#',
+      '##############=C=============#',
+      '##############=======#########',
+      '##############################',
+      '##############################',
+    ] },
+  };
+
+  SPK.LEGEND = '.,:T~#BDUFCHSMP@=';
+  var SOLID = { T: 1, '~': 1, '#': 1, B: 1 };
+  var ENTITY = { B: 1, D: 1, U: 1, F: 1, C: 1, H: 1, S: 1, M: 1, P: 1, '@': 1 };
+  var mapCache = {};
+
+  SPK.parseMap = function (id) {
+    if (mapCache[id] && mapCache[id].src === SPK.MAPS[id]) return mapCache[id].map;
+    var src = SPK.MAPS[id];
+    if (!src) throw new Error('unknown map: ' + id);
+    var rows = src.rows, h = rows.length, w = rows[0].length;
+    var tiles = new Uint8Array(w * h), entities = [];
+    for (var y = 0; y < h; y++) {
+      if (rows[y].length !== w) throw new Error('map ' + id + ' row ' + y + ' has the wrong width');
+      for (var x = 0; x < w; x++) {
+        var ch = rows[y][x], code = SPK.LEGEND.indexOf(ch);
+        if (code < 0) throw new Error('map ' + id + ' has unknown tile ' + ch);
+        tiles[y * w + x] = code;
+        if (ENTITY[ch]) entities.push({ id: id + ':' + ch + ':' + x + ',' + y, kind: ch, tx: x, ty: y });
+      }
+    }
+    var map = { id: id, w: w, h: h, tiles: tiles, entities: entities, name: src.name, cave: !!src.cave, floor: src.floor || '.' };
+    mapCache[id] = { src: src, map: map };
+    return map;
+  };
+
+  SPK.tileAt = function (map, tx, ty) {
+    if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return '#';
+    return SPK.LEGEND[map.tiles[ty * map.w + tx]];
+  };
+
+  function has(list, v) { return !!list && (typeof list.has === 'function' ? list.has(v) : list.indexOf(v) >= 0); }
+
+  // ctx = { broken: [ids] | Set, powers }
+  SPK.isSolid = function (map, tx, ty, ctx) {
+    if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return true;
+    var ch = SPK.LEGEND[map.tiles[ty * map.w + tx]];
+    if (!SOLID[ch]) return false;
+    if (ch === 'B') return !has(ctx && ctx.broken, map.id + ':B:' + tx + ',' + ty);
+    if (ch === '~' && ctx && ctx.powers && ctx.powers.bubble) return false;
+    return true;
+  };
+
+  // Moves a body (square of half-size r) by dx,dy, resolving each axis on its
+  // own so it slides along walls. Returns the new position and tiles hit.
+  SPK.moveAndSlide = function (map, body, dx, dy, ctx) {
+    var T = SPK.TILE, r = body.r, x = body.x, y = body.y, hit = [];
+    function blocked(px, py) {
+      var x0 = Math.floor((px - r) / T), x1 = Math.floor((px + r - 1e-6) / T);
+      var y0 = Math.floor((py - r) / T), y1 = Math.floor((py + r - 1e-6) / T);
+      var found = null;
+      for (var ty = y0; ty <= y1; ty++) for (var tx = x0; tx <= x1; tx++) {
+        if (SPK.isSolid(map, tx, ty, ctx)) { found = found || []; found.push({ tx: tx, ty: ty, code: SPK.tileAt(map, tx, ty) }); }
+      }
+      return found;
+    }
+    if (dx) {
+      var nx = x + dx, b = blocked(nx, y);
+      if (b) {
+        hit = hit.concat(b);
+        nx = dx > 0 ? Math.floor((nx + r) / T) * T - r : (Math.floor((nx - r) / T) + 1) * T + r;
+        if (dx > 0 ? nx < x : nx > x) nx = x;
+      }
+      x = nx;
+    }
+    if (dy) {
+      var ny = y + dy, b2 = blocked(x, ny);
+      if (b2) {
+        hit = hit.concat(b2);
+        ny = dy > 0 ? Math.floor((ny + r) / T) * T - r : (Math.floor((ny - r) / T) + 1) * T + r;
+        if (dy > 0 ? ny < y : ny > y) ny = y;
+      }
+      y = ny;
+    }
+    return { x: x, y: y, hit: hit };
+  };
+
+  SPK.DOORS = {
+    'meadow:D:24,5': { to: 'pebble', at: 'pebble:U:1,10' },
+    'pebble:U:1,10': { to: 'meadow', at: 'meadow:D:24,5' },
+  };
+
+  SPK.entity = function (id) {
+    var mapId = id.split(':')[0];
+    var m = SPK.parseMap(mapId);
+    for (var i = 0; i < m.entities.length; i++) if (m.entities[i].id === id) return m.entities[i];
+    return null;
+  };
+
+  // Where you stand after coming through a door: the first open tile next to it.
+  SPK.doorArrival = function (doorId) {
+    var e = SPK.entity(doorId), m = SPK.parseMap(doorId.split(':')[0]);
+    var dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+    var open = function (tx, ty) { var ch = SPK.tileAt(m, tx, ty); return !SPK.isSolid(m, tx, ty, null) && ch !== 'D' && ch !== 'U'; };
+    var fallback = null;
+    // Prefer stepping straight out of the door: open in front, wall behind.
+    for (var i = 0; i < dirs.length; i++) {
+      var tx = e.tx + dirs[i][0], ty = e.ty + dirs[i][1];
+      if (!open(tx, ty)) continue;
+      if (SPK.isSolid(m, e.tx - dirs[i][0], e.ty - dirs[i][1], null)) return { map: m.id, tx: tx, ty: ty };
+      fallback = fallback || { map: m.id, tx: tx, ty: ty };
+    }
+    return fallback || { map: m.id, tx: e.tx, ty: e.ty };
+  };
+
+  SPK.HOME_FIRE = 'meadow:F:12,18';
+
   SPK.createGame = function (difficulty) {
     var d = SPK.DIFF[difficulty];
     if (!d) throw new Error('unknown difficulty: ' + difficulty);
+    var start = null, meadow = SPK.parseMap('meadow');
+    for (var i = 0; i < meadow.entities.length; i++) if (meadow.entities[i].kind === '@') start = meadow.entities[i];
     return {
-      mode: 'intro', difficulty: difficulty, map: 'meadow', x: 0, y: 0, facing: 0,
+      mode: 'intro', difficulty: difficulty, map: 'meadow',
+      x: (start.tx + 0.5) * SPK.TILE, y: (start.ty + 0.5) * SPK.TILE, facing: Math.PI / 2,
       hp: d.hp, hpMax: d.hp, gems: 0, powers: {}, chests: [], friends: [], heartPieces: [],
-      campfires: [], wakeCampfire: 'home', bossBeaten: false, broken: [], explored: {},
+      campfires: [], wakeCampfire: SPK.HOME_FIRE, bossBeaten: false, broken: [], explored: {},
       closet: { owned: [], wearing: {} }, fx: {},
     };
   };
@@ -216,6 +388,8 @@
     scale = W >= H ? H / (11 * TILE) : W / (9 * TILE);
     if (input) input.relayout(layout()); else input = SPK.createInput(layout());
     keys = {}; keyPress = {};
+    chunks = {};
+    if (map) snapCamera();
   }
 
   // ── Overlays: pointerup only (no click-only handlers) ────────────────
@@ -237,6 +411,7 @@
   function startGame(difficulty) {
     if (state.mode !== 'choose') return;
     state = SPK.createGame(difficulty);
+    map = null;
     introLeft = 10;
     show('diff', false);
     resetInput('start');
@@ -289,11 +464,61 @@
   }
   function screenToWorld(sx, sy) { return { x: cam.x + (sx - W / 2) / scale, y: cam.y + (sy - H / 2) / scale }; }
 
+  // ── World ────────────────────────────────────────────────────────────
+  var map = null, chunks = {}, CHUNK = 16;
+  var doorArmed = false, fade = null, exploreT = 0, clock = 0;
+  var BODY_R = TILE * 0.32;
+
+  function loadMap(id) {
+    map = SPK.parseMap(id);
+    chunks = {};
+    if (!state.explored[id]) state.explored[id] = new Uint8Array(map.w * map.h);
+  }
+  function collideCtx() { return { broken: state.broken, powers: state.powers }; }
+  function tileUnder(x, y) { return SPK.tileAt(map, Math.floor(x / TILE), Math.floor(y / TILE)); }
+  function teleport(mapId, tx, ty) {
+    state.map = mapId; loadMap(mapId);
+    state.x = (tx + 0.5) * TILE; state.y = (ty + 0.5) * TILE;
+    walkTo = null; doorArmed = false;
+    snapCamera();
+  }
+  function goThroughDoor(doorId) {
+    var link = SPK.DOORS[doorId];
+    if (!link) return;
+    var arrive = SPK.doorArrival(link.at);
+    fade = { t: 0, dur: 0.4, swapped: false, swap: function () { teleport(arrive.map, arrive.tx, arrive.ty); } };
+    resetInput('door');
+  }
+  function markExplored() {
+    var ex = state.explored[map.id], cx = Math.floor(state.x / TILE), cy = Math.floor(state.y / TILE), R = 6;
+    for (var y = cy - R; y <= cy + R; y++) for (var x = cx - R; x <= cx + R; x++) {
+      if (x >= 0 && y >= 0 && x < map.w && y < map.h && (x - cx) * (x - cx) + (y - cy) * (y - cy) <= R * R) ex[y * map.w + x] = 1;
+    }
+  }
+
+  // ── Camera ───────────────────────────────────────────────────────────
+  function clampCam(x, y) {
+    var hw = W / 2 / scale, hh = H / 2 / scale, mw = map.w * TILE, mh = map.h * TILE;
+    return {
+      x: mw <= hw * 2 ? mw / 2 : Math.max(hw, Math.min(mw - hw, x)),
+      y: mh <= hh * 2 ? mh / 2 : Math.max(hh, Math.min(mh - hh, y)),
+    };
+  }
+  function snapCamera() { if (map) { var c = clampCam(state.x, state.y); cam.x = c.x; cam.y = c.y; } }
+
   // ── Update ───────────────────────────────────────────────────────────
   var SPEED = 4 * TILE; // px/s
   function update(dt) {
     input.tick(now());
+    clock += dt;
     if (state.mode === 'intro') { introLeft -= dt; if (introLeft <= 0) state.mode = 'play'; }
+    if (!map && state.map) { loadMap(state.map); snapCamera(); }
+    if (fade) {
+      fade.t += dt;
+      if (!fade.swapped && fade.t >= fade.dur / 2) { fade.swapped = true; fade.swap(); }
+      if (fade.t >= fade.dur) fade = null;
+      return;
+    }
     if (state.mode !== 'play') return;
     var v = moveVec();
     var t = input.consumeTap();
@@ -303,11 +528,24 @@
       var dx = walkTo.x - state.x, dy = walkTo.y - state.y, d = Math.hypot(dx, dy);
       if (d < 4) walkTo = null; else v = { x: dx / d, y: dy / d };
     }
-    state.x += v.x * SPEED * dt; state.y += v.y * SPEED * dt;
-    if (v.x || v.y) state.facing = Math.atan2(v.y, v.x);
+    if (v.x || v.y) {
+      var res = SPK.moveAndSlide(map, { x: state.x, y: state.y, r: BODY_R }, v.x * SPEED * dt, v.y * SPEED * dt, collideCtx());
+      if (walkTo && res.hit.length && Math.hypot(res.x - state.x, res.y - state.y) < 0.5) walkTo = null;
+      state.x = res.x; state.y = res.y;
+      state.facing = Math.atan2(v.y, v.x);
+    }
+    // doors: step off a door before it can take you anywhere again
+    var under = tileUnder(state.x, state.y);
+    if (under === 'D' || under === 'U') {
+      if (doorArmed) goThroughDoor(map.id + ':' + under + ':' + Math.floor(state.x / TILE) + ',' + Math.floor(state.y / TILE));
+    } else doorArmed = true;
+    exploreT -= dt;
+    if (exploreT <= 0) { exploreT = 0.25; markExplored(); }
     if (pressed('magic')) stats.bolts++;
     pressed('horn'); pressed('map');
-    cam.x = state.x; cam.y = state.y;
+    var c = clampCam(state.x, state.y);
+    var k = Math.min(1, dt * 10);
+    cam.x += (c.x - cam.x) * k; cam.y += (c.y - cam.y) * k;
   }
 
   // ── Draw ─────────────────────────────────────────────────────────────
@@ -339,22 +577,181 @@
     circleBtn(L.map, '🗺️', input.held('map'));
   }
 
+  // ── Tiles (pre-rendered into chunk canvases) ─────────────────────────
+  function hash(x, y) { var h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+  function ground(c, ch, x, y, cave) {
+    var r = hash(x, y);
+    if (cave) {
+      c.fillStyle = r < 0.5 ? '#7c6a58' : '#76644f';
+      c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
+      if (r > 0.8) { c.fillStyle = '#8f7c68'; c.beginPath(); c.arc(8 + r * 14, 10 + r * 9, 2.5, 0, 7); c.fill(); }
+      return;
+    }
+    c.fillStyle = r < 0.5 ? '#8bd977' : '#84d270';
+    c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
+    if (r > 0.7) { c.fillStyle = '#74c25f'; c.fillRect(6 + r * 16, 8 + r * 10, 2, 5); c.fillRect(10 + r * 12, 7 + r * 12, 2, 6); }
+  }
+  function drawTile(c, ch, x, y, cave) {
+    var r = hash(x, y);
+    switch (ch) {
+      case ',':
+        ground(c, ch, x, y, cave);
+        var cols = ['#f472b6', '#fde047', '#ffffff', '#c084fc'];
+        for (var i = 0; i < 3; i++) {
+          var fx = 5 + hash(x + i, y) * 22, fy = 5 + hash(x, y + i) * 22;
+          c.fillStyle = cols[(i + Math.floor(r * 4)) % 4]; c.beginPath(); c.arc(fx, fy, 2.6, 0, 7); c.fill();
+          c.fillStyle = '#fef08a'; c.beginPath(); c.arc(fx, fy, 1, 0, 7); c.fill();
+        }
+        break;
+      case ':':
+        c.fillStyle = '#ecd9a8'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
+        c.fillStyle = '#dcc590'; c.beginPath(); c.arc(6 + r * 20, 8 + r * 14, 2, 0, 7); c.fill();
+        break;
+      case 'T':
+        ground(c, '.', x, y, cave);
+        c.fillStyle = '#8b5a2b'; c.fillRect(13, 18, 6, 12);
+        c.fillStyle = r < 0.5 ? '#2f9e44' : '#37a84c'; c.beginPath(); c.arc(16, 13, 13, 0, 7); c.fill();
+        c.fillStyle = 'rgba(255,255,255,.18)'; c.beginPath(); c.arc(11, 9, 5, 0, 7); c.fill();
+        break;
+      case '~':
+        c.fillStyle = '#5aa9f5'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
+        break;
+      case '#':
+        c.fillStyle = cave ? '#3d3530' : '#a8a29e'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
+        c.strokeStyle = cave ? '#2b2420' : '#8a8480'; c.lineWidth = 2;
+        c.strokeRect(1, 1, 14, 14); c.strokeRect(17, 1, 14, 14); c.strokeRect(9, 17, 14, 14);
+        break;
+      case 'B':
+        ground(c, '.', x, y, cave);
+        c.fillStyle = '#9ca3af'; c.beginPath(); c.arc(16, 17, 13, 0, 7); c.fill();
+        c.strokeStyle = '#4b5563'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(10, 8); c.lineTo(15, 16); c.lineTo(11, 22); c.moveTo(15, 16); c.lineTo(22, 19); c.stroke();
+        break;
+      case 'D':
+        c.fillStyle = '#a8a29e'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
+        c.fillStyle = '#1c1917'; c.beginPath(); c.arc(16, 18, 13, Math.PI, 0); c.lineTo(29, 32); c.lineTo(3, 32); c.fill();
+        break;
+      case 'U':
+        ground(c, '=', x, y, true);
+        c.fillStyle = 'rgba(253,230,138,.55)'; c.beginPath(); c.arc(16, 16, 12, 0, 7); c.fill();
+        break;
+      default:
+        ground(c, ch, x, y, cave);
+    }
+  }
+  function floorChar(ch) { return (ch === 'F' || ch === 'C' || ch === 'H' || ch === 'S' || ch === 'M' || ch === 'P' || ch === '@') ? map.floor : ch; }
+  function chunkRes() { return Math.min(3, Math.max(1, scale * DPR)); }
+  function getChunk(cx, cy) {
+    var key = cx + ',' + cy;
+    if (chunks[key]) return chunks[key];
+    var res = chunkRes(), cv = document.createElement('canvas');
+    cv.width = cv.height = Math.ceil(CHUNK * TILE * res);
+    var c = cv.getContext('2d');
+    c.scale(res, res);
+    for (var y = 0; y < CHUNK; y++) for (var x = 0; x < CHUNK; x++) {
+      var tx = cx * CHUNK + x, ty = cy * CHUNK + y;
+      if (tx >= map.w || ty >= map.h) continue;
+      var ch = SPK.tileAt(map, tx, ty);
+      if (ch === 'B' && !SPK.isSolid(map, tx, ty, collideCtx())) ch = map.floor;
+      c.save(); c.translate(x * TILE, y * TILE);
+      drawTile(c, floorChar(ch), tx, ty, map.cave);
+      c.restore();
+    }
+    chunks[key] = cv;
+    return cv;
+  }
+
+  function drawWorld() {
+    var hw = W / 2 / scale, hh = H / 2 / scale;
+    var x0 = cam.x - hw, y0 = cam.y - hh, x1 = cam.x + hw, y1 = cam.y + hh;
+    var span = CHUNK * TILE;
+    for (var cy = Math.max(0, Math.floor(y0 / span)); cy <= Math.floor(y1 / span); cy++) {
+      for (var cx = Math.max(0, Math.floor(x0 / span)); cx <= Math.floor(x1 / span); cx++) {
+        if (cx * CHUNK >= map.w || cy * CHUNK >= map.h) continue;
+        // overlap by ~1 device pixel so chunk edges never show a seam
+        ctx.drawImage(getChunk(cx, cy), cx * span, cy * span, span + 1 / scale, span + 1 / scale);
+      }
+    }
+    // water shimmer on visible water tiles
+    var tx0 = Math.max(0, Math.floor(x0 / TILE)), ty0 = Math.max(0, Math.floor(y0 / TILE));
+    var tx1 = Math.min(map.w - 1, Math.floor(x1 / TILE)), ty1 = Math.min(map.h - 1, Math.floor(y1 / TILE));
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    for (var ty = ty0; ty <= ty1; ty++) for (var tx = tx0; tx <= tx1; tx++) {
+      if (SPK.tileAt(map, tx, ty) !== '~') continue;
+      var ph = clock * 1.6 + hash(tx, ty) * 6.28;
+      ctx.fillRect(tx * TILE + 6 + Math.sin(ph) * 4, ty * TILE + 10 + hash(ty, tx) * 12, 9, 2);
+    }
+    drawEntities(tx0, ty0, tx1, ty1);
+  }
+
+  function emoji(ch, x, y, size) {
+    ctx.font = Math.round(size) + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#000';
+    ctx.fillText(ch, x, y);
+  }
+  function drawEntities(tx0, ty0, tx1, ty1) {
+    for (var i = 0; i < map.entities.length; i++) {
+      var e = map.entities[i];
+      if (e.tx < tx0 - 1 || e.tx > tx1 + 1 || e.ty < ty0 - 1 || e.ty > ty1 + 1) continue;
+      var x = (e.tx + 0.5) * TILE, y = (e.ty + 0.5) * TILE;
+      if (e.kind === 'F') {
+        var lit = state.campfires.indexOf(e.id) >= 0;
+        ctx.fillStyle = '#7c4a1e'; ctx.fillRect(x - 11, y + 6, 22, 5);
+        if (lit) {
+          var f = 1 + Math.sin(clock * 9 + e.tx) * 0.08;
+          ctx.fillStyle = 'rgba(253,186,116,.35)'; ctx.beginPath(); ctx.arc(x, y, 22, 0, 7); ctx.fill();
+          ctx.fillStyle = '#fb923c'; ctx.beginPath(); ctx.ellipse(x, y, 8 * f, 12 * f, 0, 0, 7); ctx.fill();
+          ctx.fillStyle = '#fde047'; ctx.beginPath(); ctx.ellipse(x, y + 3, 4 * f, 7 * f, 0, 0, 7); ctx.fill();
+        } else {
+          ctx.fillStyle = '#a16207'; ctx.fillRect(x - 9, y + 1, 18, 5);
+        }
+      } else if (e.kind === 'C') {
+        var open = state.chests.indexOf(e.id) >= 0;
+        ctx.fillStyle = '#b45309'; ctx.fillRect(x - 11, y - 4, 22, 14);
+        ctx.fillStyle = open ? '#78350f' : '#d97706'; ctx.fillRect(x - 12, y - (open ? 12 : 9), 24, open ? 6 : 8);
+        ctx.fillStyle = '#fde047'; ctx.fillRect(x - 2, y - 3, 4, 5);
+        if (!open) { ctx.fillStyle = 'rgba(255,255,255,' + (0.4 + 0.4 * Math.sin(clock * 3 + e.tx)) + ')'; ctx.fillRect(x + 7, y - 13, 3, 3); }
+      } else if (e.kind === 'H') {
+        if (state.heartPieces.indexOf(e.id) < 0) emoji('💗', x, y + Math.sin(clock * 3) * 2, TILE * 0.6);
+      } else if (e.kind === 'P') {
+        ctx.fillStyle = '#d6d3d1'; ctx.fillRect(x - 10, y - 2, 20, 12);
+        if (!state.powers.mighty) {
+          ctx.fillStyle = 'rgba(250,204,21,' + (0.35 + 0.25 * Math.sin(clock * 4)) + ')'; ctx.beginPath(); ctx.arc(x, y - 10, 14, 0, 7); ctx.fill();
+          emoji('🪨', x, y - 10 + Math.sin(clock * 3) * 2, TILE * 0.55);
+        }
+      }
+    }
+  }
+
+  function drawPlayer() {
+    ctx.save();
+    ctx.translate(state.x, state.y);
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(0, TILE * 0.38, TILE * 0.36, TILE * 0.12, 0, 0, 7); ctx.fill();
+    if (Math.cos(state.facing) > 0.1) ctx.scale(-1, 1); // the emoji faces left
+    emoji('🦄', 0, 0, TILE * 1.1);
+    ctx.restore();
+  }
+
   function draw() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    ctx.fillStyle = '#86efac';
+    ctx.fillStyle = map && map.cave ? '#1c1714' : '#2f9e44';
     ctx.fillRect(0, 0, W, H);
-    if (state.mode === 'title' || state.mode === 'choose') return;
-    // grid so movement is visible (replaced by the tile map in Task 4)
+    if (!map || state.mode === 'title' || state.mode === 'choose') return;
     ctx.save();
-    ctx.translate(W / 2, H / 2); ctx.scale(scale, scale); ctx.translate(-cam.x, -cam.y);
-    ctx.strokeStyle = 'rgba(0,0,0,.06)';
-    var x0 = Math.floor((cam.x - W / scale) / TILE) * TILE, y0 = Math.floor((cam.y - H / scale) / TILE) * TILE;
-    for (var x = x0; x < cam.x + W / scale; x += TILE) { ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, cam.y + H / scale); ctx.stroke(); }
-    for (var y = y0; y < cam.y + H / scale; y += TILE) { ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(cam.x + W / scale, y); ctx.stroke(); }
-    ctx.font = Math.round(TILE * 1.2) + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('🦄', state.x, state.y);
+    ctx.translate(Math.round(W / 2), Math.round(H / 2)); ctx.scale(scale, scale); ctx.translate(-cam.x, -cam.y);
+    drawWorld();
+    drawPlayer();
     ctx.restore();
+    if (map.cave) {
+      var g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.7);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
     if (state.mode === 'play') drawControls();
+    if (fade) {
+      ctx.fillStyle = 'rgba(15,10,30,' + Math.max(0, 1 - Math.abs(fade.t / fade.dur * 2 - 1)) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
   }
 
   function frame(t) {
@@ -379,6 +776,7 @@
     get pops() { return stats.pops; },
     get inputs() { return { active: input.active(), lastReset: input.lastReset, move: input.moveVec() }; },
     layout: function () { return input.layout(); },
+    _teleport: function (mapId, tx, ty) { teleport(mapId, tx, ty); },
   };
 
   resize();
