@@ -537,7 +537,7 @@ test('nextGoal leads from the cave door to the pedestal to the boulder, then res
   g.map = 'meadow';
   assert.equal(tile(SPK.nextGoal(g)), 'meadow:7,27');
   g.broken.push('meadow:B:7,27');
-  assert.equal(SPK.nextGoal(g), null);
+  assert.equal(tile(SPK.nextGoal(g)), 'meadow:46,14', 'then the rock on the way to the woods');
 });
 
 test('the bunny says something different as you progress', () => {
@@ -784,4 +784,66 @@ test('cave bats: one hit, quick dives', () => {
   const b = SPK.ENEMIES.bat;
   assert.equal(b.hp, 1);
   assert.ok(b.dive && b.dive.every > 1.5 && b.dive.dur < 1);
+});
+
+// ── Slice 2, Task 3: the way forward ────────────────────────────────────
+const tileOf = (goal) => goal && `${goal.map}:${goal.tx},${goal.ty}`;
+
+test('exitToward finds the door that leads toward another map', () => {
+  assert.equal(SPK.exitToward('grotto', 'meadow'), 'grotto:U:1,12');
+  assert.equal(SPK.exitToward('meadow', 'grotto'), 'meadow:>:47,14');
+  assert.equal(SPK.exitToward('pebble', 'bubble'), 'pebble:U:1,10');
+  assert.equal(SPK.exitToward('woods', 'bubble'), 'woods:D:51,26');
+  assert.equal(SPK.exitToward('woods', 'woods'), null);
+});
+
+test('nextGoal walks the whole slice 2 chain, hopping maps through doors', () => {
+  const g = SPK.createGame('easy');
+  g.powers.mighty = true;
+  g.broken.push('meadow:B:7,27');
+  assert.equal(tileOf(SPK.nextGoal(g)), 'meadow:46,14');
+  g.broken.push('meadow:B:46,14');
+  assert.equal(tileOf(SPK.nextGoal(g)), 'meadow:47,14', 'walk on into the woods');
+  g.map = 'woods';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'woods:30,5', 'the rock in front of the grotto');
+  g.broken.push('woods:B:30,5');
+  assert.equal(tileOf(SPK.nextGoal(g)), 'woods:30,4', 'into the grotto');
+  g.map = 'grotto';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'grotto:32,4');
+  g.powers.glow = true;
+  assert.equal(tileOf(SPK.nextGoal(g)), 'grotto:1,12', 'back out');
+  g.map = 'woods';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'woods:51,26', 'to the bubble cavern');
+  g.map = 'bubble';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'bubble:3,3');
+  g.powers.bubble = true;
+  assert.equal(tileOf(SPK.nextGoal(g)), 'bubble:32,11');
+  g.map = 'woods';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'woods:26,24', 'walk on water to the island');
+  SPK.openChest(g, 'woods:C:26,24');
+  assert.equal(SPK.nextGoal(g), null);
+});
+
+test('a slice-1 save still loads and points to the woods', () => {
+  const g = SPK.createGame('normal');
+  g.powers.mighty = true; g.broken.push('meadow:B:7,27'); SPK.openChest(g, 'meadow:C:4,28');
+  g.mode = 'play';
+  const loaded = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g)))));
+  assert.equal(tileOf(SPK.nextGoal(loaded)), 'meadow:46,14');
+});
+
+test('the critters have a different picture hint at every stage', () => {
+  assert.deepEqual([...SPK.CRITTERS.map((c) => c.map)].sort(), ['meadow', 'woods']);
+  for (const c of SPK.CRITTERS) assert.ok(!SPK.isSolid(SPK.parseMap(c.map), c.tx, c.ty, null), `${c.emoji} stands on open ground`);
+  const g = SPK.createGame('easy');
+  const seen = new Set();
+  const step = (f) => { f(); seen.add(SPK.critterHint(g).picture.join('')); };
+  step(() => {});
+  step(() => { g.powers.mighty = true; });
+  step(() => { g.broken.push('meadow:B:7,27'); });
+  step(() => { g.broken.push('meadow:B:46,14'); });
+  step(() => { g.powers.glow = true; });
+  step(() => { g.powers.bubble = true; });
+  step(() => { SPK.openChest(g, 'woods:C:26,24'); });
+  assert.equal(seen.size, 7);
 });

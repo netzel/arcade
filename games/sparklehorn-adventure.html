@@ -563,20 +563,66 @@
   };
 
   // ── Where to go next (the hint trail) and what the bunny says ────────
-  SPK.BOULDER = 'meadow:B:7,27';
+  SPK.BOULDER = 'meadow:B:7,27';       // the secret chest's rock
+  SPK.EAST_BOULDER = 'meadow:B:46,14';  // the way to the woods
+  SPK.GROTTO_BOULDER = 'woods:B:30,5';
+  SPK.ISLAND_CHEST = 'woods:C:26,24';
   function goalAt(id) { var e = SPK.entity(id); return { map: id.split(':')[0], tx: e.tx, ty: e.ty }; }
-  SPK.nextGoal = function (state) {
-    if (!state.powers.mighty) return state.map === 'pebble' ? goalAt('pebble:P:27,11') : goalAt('meadow:D:24,5');
-    if (state.broken.indexOf(SPK.BOULDER) < 0) return state.map === 'pebble' ? goalAt('pebble:U:1,10') : goalAt(SPK.BOULDER);
+
+  // The door on fromMap that starts the shortest walk to toMap.
+  SPK.exitToward = function (fromMap, toMap) {
+    if (fromMap === toMap) return null;
+    var first = {}, seen = {}, queue = [fromMap];
+    seen[fromMap] = true;
+    while (queue.length) {
+      var m = queue.shift();
+      for (var id in SPK.DOORS) {
+        if (id.split(':')[0] !== m) continue;
+        var to = SPK.DOORS[id].to;
+        if (seen[to]) continue;
+        seen[to] = true;
+        first[to] = m === fromMap ? id : first[m];
+        if (to === toMap) return first[to];
+        queue.push(to);
+      }
+    }
     return null;
   };
 
-  SPK.CRITTER = { map: 'meadow', tx: 14, ty: 18, emoji: '🐰' };
-  SPK.critterHint = function (state) {
-    if (!state.powers.mighty) return { picture: ['🦄', '➡️', '🕳️', '✨'], text: 'Something magic is in Pebble Cave!' };
-    if (state.broken.indexOf(SPK.BOULDER) < 0) return { picture: ['🦄', '💥', '🪨', '🌳'], text: 'Bonk the cracked rock by the trees!' };
-    return { picture: ['🦄', '💖', '🗺️'], text: 'You did it! Keep exploring!' };
+  // The adventure's big steps, in order: what to do next, and where.
+  SPK.stage = function (state) {
+    var broke = function (id) { return state.broken.indexOf(id) >= 0; };
+    if (!state.powers.mighty) return { key: 'mighty', at: 'pebble:P:27,11' };
+    if (!broke(SPK.BOULDER)) return { key: 'secret', at: SPK.BOULDER };
+    if (!broke(SPK.EAST_BOULDER)) return { key: 'east', at: SPK.EAST_BOULDER };
+    if (!state.powers.glow) return { key: 'glow', at: broke(SPK.GROTTO_BOULDER) ? 'grotto:P:32,4' : SPK.GROTTO_BOULDER };
+    if (!state.powers.bubble) return { key: 'bubble', at: 'bubble:P:3,3' };
+    if (state.chests.indexOf(SPK.ISLAND_CHEST) < 0) return { key: 'island', at: SPK.ISLAND_CHEST };
+    return { key: 'done', at: null };
   };
+  SPK.nextGoal = function (state) {
+    var at = SPK.stage(state).at;
+    if (!at) return null;
+    var target = at.split(':')[0];
+    if (target === state.map) return goalAt(at);
+    var exit = SPK.exitToward(state.map, target);
+    return exit ? goalAt(exit) : null;
+  };
+
+  SPK.CRITTERS = [
+    { map: 'meadow', tx: 14, ty: 18, emoji: '🐰' },
+    { map: 'woods', tx: 8, ty: 16, emoji: '🦊' },
+  ];
+  var HINTS = {
+    mighty: { picture: ['🦄', '➡️', '🕳️', '✨'], text: 'Something magic is in Pebble Cave!' },
+    secret: { picture: ['🦄', '💥', '🪨', '🌳'], text: 'Bonk the cracked rock by the trees!' },
+    east:   { picture: ['🪨', '💥', '➡️', '🍄'], text: 'Bonk the rock on the path to the woods!' },
+    glow:   { picture: ['🍄', '🪨', '💥', '🕳️'], text: 'A glowing cave hides behind a rock in the woods!' },
+    bubble: { picture: ['🦄', '🕳️', '💧', '🫧'], text: 'Find the bubbly cave past the big rocks!' },
+    island: { picture: ['🦄', '🫧', '🌊', '🏝️'], text: 'Walk on the pond to the island!' },
+    done:   { picture: ['🦄', '💖', '🗺️'], text: 'You did it! Keep exploring!' },
+  };
+  SPK.critterHint = function (state) { return HINTS[SPK.stage(state).key]; };
 
   // ── Saves ────────────────────────────────────────────────────────────
   SPK.encodeBits = function (bits) {
@@ -1400,10 +1446,17 @@
       window.speechSynthesis.speak(u);
     } catch (e) { /* no voice this time */ }
   }
+  function nearCritter() {
+    for (var i = 0; i < SPK.CRITTERS.length; i++) {
+      var c = SPK.CRITTERS[i];
+      if (c.map === map.id && Math.hypot((c.tx + 0.5) * TILE - state.x, (c.ty + 0.5) * TILE - state.y) <= 3 * TILE) return c;
+    }
+    return null;
+  }
   function drawBubble() {
-    if (map.id !== SPK.CRITTER.map) return;
-    var bx = (SPK.CRITTER.tx + 0.5) * TILE, by = (SPK.CRITTER.ty + 0.5) * TILE;
-    if (Math.hypot(bx - state.x, by - state.y) > 3 * TILE) return;
+    var cr = nearCritter();
+    if (!cr) return;
+    var bx = (cr.tx + 0.5) * TILE, by = (cr.ty + 0.5) * TILE;
     var hint = SPK.critterHint(state);
     var sx = W / 2 + (bx - cam.x) * scale, sy = H / 2 + (by - cam.y) * scale;
     var e = Math.max(26, Math.min(40, W / 22)), n = hint.picture.length;
@@ -1736,7 +1789,9 @@
     }
     drawEntities(tx0, ty0, tx1, ty1);
     drawTrail();
-    if (map.id === SPK.CRITTER.map) emoji(SPK.CRITTER.emoji, (SPK.CRITTER.tx + 0.5) * TILE, (SPK.CRITTER.ty + 0.5) * TILE - Math.abs(Math.sin(clock * 3)) * 4, TILE * 0.8);
+    SPK.CRITTERS.forEach(function (c) {
+      if (c.map === map.id) emoji(c.emoji, (c.tx + 0.5) * TILE, (c.ty + 0.5) * TILE - Math.abs(Math.sin(clock * 3 + c.tx)) * 4, TILE * 0.8);
+    });
   }
 
   function emoji(ch, x, y, size) {
