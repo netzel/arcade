@@ -821,7 +821,7 @@ test('nextGoal walks the whole slice 2 chain, hopping maps through doors', () =>
   g.map = 'woods';
   assert.equal(tileOf(SPK.nextGoal(g)), 'woods:26,24', 'walk on water to the island');
   SPK.openChest(g, 'woods:C:26,24');
-  assert.equal(SPK.nextGoal(g), null);
+  assert.equal(tileOf(SPK.nextGoal(g)), 'woods:55,14', 'then east to the lake');
 });
 
 test('a slice-1 save still loads and points to the woods', () => {
@@ -833,7 +833,7 @@ test('a slice-1 save still loads and points to the woods', () => {
 });
 
 test('the critters have a different picture hint at every stage', () => {
-  assert.deepEqual([...SPK.CRITTERS.map((c) => c.map)].sort(), ['meadow', 'woods']);
+  assert.deepEqual([...SPK.CRITTERS.map((c) => c.map)].sort(), ['hills', 'lake', 'meadow', 'woods']);
   for (const c of SPK.CRITTERS) assert.ok(!SPK.isSolid(SPK.parseMap(c.map), c.tx, c.ty, null), `${c.emoji} stands on open ground`);
   const g = SPK.createGame('easy');
   const seen = new Set();
@@ -845,7 +845,9 @@ test('the critters have a different picture hint at every stage', () => {
   step(() => { g.powers.glow = true; });
   step(() => { g.powers.bubble = true; });
   step(() => { SPK.openChest(g, 'woods:C:26,24'); });
-  assert.equal(seen.size, 7);
+  step(() => { g.powers.hop = true; });
+  step(() => { SPK.openChest(g, 'hills:C:31,3'); });
+  assert.equal(seen.size, 9);
 });
 
 // ── Slice 2, Task 4: power-ups and Big Sparkle ──────────────────────────
@@ -1143,4 +1145,47 @@ test('double sparkle fires two bolts, and seven with star burst', () => {
   assert.ok(Math.abs(two[0] + two[1]) < 1e-9 && Math.abs(two[0]) > 0.05, 'side by side around the aim');
   SPK.grantPowerup(g, 'starBurst', 0);
   assert.equal(SPK.fireMagic(g, 0, 1).length, 7);
+});
+
+// ── Slice 3, Task 3: routing, hints, critters ───────────────────────────
+test('nextGoal walks the slice 3 chain: lake, cloud cave, hills, then rests', () => {
+  const g = SPK.createGame('easy');
+  g.powers.mighty = g.powers.glow = g.powers.bubble = true;
+  g.broken.push('meadow:B:7,27', 'meadow:B:46,14', 'woods:B:30,5');
+  SPK.openChest(g, 'woods:C:26,24');
+  g.map = 'meadow';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'meadow:47,14', 'from home, out through the woods');
+  g.map = 'lake';
+  assert.equal(SPK.stage(g).key, 'cloud');
+  assert.equal(tileOf(SPK.nextGoal(g)), 'lake:28,16', 'the cave on the island');
+  g.map = 'cloud';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'cloud:30,3');
+  g.powers.hop = true;
+  assert.equal(SPK.stage(g).key, 'hills');
+  assert.equal(tileOf(SPK.nextGoal(g)), 'cloud:1,10', 'back out');
+  g.map = 'lake';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'lake:26,0', 'north to the hills');
+  g.map = 'hills';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'hills:31,3', 'the chest by the windmill');
+  SPK.openChest(g, 'hills:C:31,3');
+  assert.equal(SPK.stage(g).key, 'done');
+  assert.equal(SPK.nextGoal(g), null);
+});
+
+test('a slice-2 save that finished the woods loads and points to the lake', () => {
+  const g = SPK.createGame('normal');
+  g.powers.mighty = g.powers.glow = g.powers.bubble = true;
+  g.broken.push('meadow:B:7,27', 'meadow:B:46,14', 'woods:B:30,5');
+  SPK.openChest(g, 'woods:C:26,24');
+  g.map = 'woods'; g.x = 20.5 * 32; g.y = 14.5 * 32; g.mode = 'play';
+  const loaded = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g)))));
+  assert.equal(tileOf(SPK.nextGoal(loaded)), 'woods:55,14');
+});
+
+test('ten star friends and ten heart pieces exist so far', () => {
+  assert.equal(Object.keys(SPK.FRIENDS).length, 10);
+  let hearts = 0;
+  for (const id of REAL_MAPS) hearts += SPK.parseMap(id).entities.filter((e) => e.kind === 'H').length;
+  hearts += Object.values(SPK.CHESTS).filter((c) => c.heartPiece).length;
+  assert.equal(hearts, 10);
 });

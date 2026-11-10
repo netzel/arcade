@@ -746,6 +746,7 @@
   SPK.EAST_BOULDER = 'meadow:B:46,14';  // the way to the woods
   SPK.GROTTO_BOULDER = 'woods:B:30,5';
   SPK.ISLAND_CHEST = 'woods:C:26,24';
+  SPK.DOUBLE_CHEST = 'hills:C:31,3';     // Double Sparkle, by the windmill
   function goalAt(id) { var e = SPK.entity(id); return { map: id.split(':')[0], tx: e.tx, ty: e.ty }; }
 
   // The door on fromMap that starts the shortest walk to toMap.
@@ -778,6 +779,8 @@
     if (!state.powers.glow) return { key: 'glow', at: broke(SPK.GROTTO_BOULDER) ? 'grotto:P:32,4' : SPK.GROTTO_BOULDER };
     if (!state.powers.bubble) return { key: 'bubble', at: 'bubble:P:3,3' };
     if (state.chests.indexOf(SPK.ISLAND_CHEST) < 0) return { key: 'island', at: SPK.ISLAND_CHEST };
+    if (!state.powers.hop) return { key: 'cloud', at: 'cloud:P:30,3' };
+    if (state.chests.indexOf(SPK.DOUBLE_CHEST) < 0) return { key: 'hills', at: SPK.DOUBLE_CHEST };
     return { key: 'done', at: null };
   };
   SPK.nextGoal = function (state) {
@@ -792,6 +795,8 @@
   SPK.CRITTERS = [
     { map: 'meadow', tx: 14, ty: 18, emoji: '🐰' },
     { map: 'woods', tx: 8, ty: 16, emoji: '🦊' },
+    { map: 'lake', tx: 3, ty: 13, emoji: '🦦' },
+    { map: 'hills', tx: 28, ty: 29, emoji: '🐐' },
   ];
   var HINTS = {
     mighty: { picture: ['🦄', '➡️', '🕳️', '✨'], text: 'Something magic is in Pebble Cave!' },
@@ -800,6 +805,8 @@
     glow:   { picture: ['🍄', '🪨', '💥', '🕳️'], text: 'A glowing cave hides behind a rock in the woods!' },
     bubble: { picture: ['🦄', '🕳️', '💧', '🫧'], text: 'Find the bubbly cave past the big rocks!' },
     island: { picture: ['🦄', '🫧', '🌊', '🏝️'], text: 'Walk on the pond to the island!' },
+    cloud:  { picture: ['🌊', '🏝️', '🕳️', '☁️'], text: 'A cloud cave hides on the lake island!' },
+    hills:  { picture: ['☁️', '🦄', '⛰️', '🎁'], text: 'Hop over the gaps up to the windmill!' },
     done:   { picture: ['🦄', '💖', '🗺️'], text: 'You did it! Keep exploring!' },
   };
   SPK.critterHint = function (state) { return HINTS[SPK.stage(state).key]; };
@@ -1974,13 +1981,16 @@
   var SONGS = {
     meadow: { step: 0.32, notes: [523, 659, 784, 659, 587, 698, 880, 698, 523, 659, 784, 1047, 988, 784, 659, 587], bass: [262, 262, 349, 349, 262, 262, 392, 392] },
     woods:  { step: 0.36, notes: [440, 523, 587, 659, 587, 523, 494, 440, 392, 440, 523, 587, 523, 494, 440, 392], bass: [220, 220, 196, 196, 175, 175, 196, 196] },
+    lake:   { step: 0.34, notes: [587, 698, 880, 698, 659, 784, 988, 784, 587, 698, 880, 1175, 1047, 880, 784, 659], bass: [294, 294, 262, 262, 233, 233, 262, 262] },
+    hills:  { step: 0.28, notes: [659, 784, 880, 784, 659, 587, 523, 587, 659, 784, 988, 880, 784, 659, 587, 523], bass: [330, 330, 294, 294, 262, 262, 294, 294] },
+    cloud:  { step: 0.44, notes: [784, 988, 1175, 988, 880, 1047, 1319, 1047, 784, 988, 1175, 1568, 1319, 1175, 988, 880], bass: [392, 392, 349, 349, 330, 330, 349, 349] },
     cave:   { step: 0.42, notes: [440, 523, 659, 523, 494, 587, 698, 587, 440, 523, 659, 880, 784, 659, 523, 494], bass: [220, 220, 175, 175, 220, 220, 165, 165] },
   };
   var music = { song: null, i: 0, next: 0 };
   function updateMusic() {
     try {
       if (!actx || actx.state !== 'running' || !map || state.mode === 'title' || state.mode === 'choose') return;
-      var want = map.cave ? 'cave' : map.theme === 'woods' ? 'woods' : 'meadow';
+      var want = SONGS[map.theme] ? map.theme : map.cave ? 'cave' : 'meadow';
       if (music.song !== want) { music.song = want; music.i = 0; music.next = actx.currentTime + 0.1; }
       var s = SONGS[want];
       if (music.next < actx.currentTime - 1) music.next = actx.currentTime + 0.05; // after a pause, don't burst-catch-up
