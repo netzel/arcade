@@ -206,7 +206,7 @@ test('layout: buttons do not overlap each other or the arcade menu corner', () =
 });
 
 // ── Task 4: maps & collision ────────────────────────────────────────────
-const REAL_MAPS = ['meadow', 'pebble', 'woods', 'grotto', 'bubble'];
+const REAL_MAPS = ['meadow', 'pebble', 'woods', 'grotto', 'bubble', 'lake', 'cloud', 'hills'];
 
 test('maps parse with consistent widths', () => {
   for (const id of REAL_MAPS) {
@@ -214,8 +214,8 @@ test('maps parse with consistent widths', () => {
     const m = SPK.parseMap(id);
     assert.equal(m.h, rows.length);
     for (const r of rows) assert.equal(r.length, m.w, `${id} row width`);
-    const starts = m.entities.filter((e) => e.kind === (id === 'meadow' ? '@' : id === 'woods' ? '>' : 'U'));
-    assert.equal(starts.length, 1, `${id} has one start`);
+    if (id === 'meadow') assert.equal(m.entities.filter((e) => e.kind === '@').length, 1, 'meadow has one start');
+    if (m.cave) assert.equal(m.entities.filter((e) => e.kind === 'U').length, 1, `${id} has one way out`);
   }
   assert.equal(SPK.parseMap('meadow').w, 48);
   assert.equal(SPK.parseMap('meadow').h, 32);
@@ -751,7 +751,7 @@ test('everything in each cave is reachable; island things need water, and are re
 });
 
 test('each pedestal grants its power once', () => {
-  assert.deepEqual(Object.values(SPK.PEDESTALS).map((p) => p.power).sort(), ['bubble', 'glow', 'mighty']);
+  assert.deepEqual(Object.values(SPK.PEDESTALS).map((p) => p.power).sort(), ['bubble', 'glow', 'hop', 'mighty']);
   for (const id of Object.keys(SPK.PEDESTALS)) assert.equal(SPK.entity(id).kind, 'P', `${id} is a pedestal`);
   const g = SPK.createGame('easy');
   const r = SPK.takePedestal(g, 'grotto:P:32,4');
@@ -903,7 +903,7 @@ test('big sparkle is a chest upgrade that makes bolts do 2', () => {
 test('every star friend spot has a friend, and every friend has a spot', () => {
   const spots = [];
   for (const id of REAL_MAPS) for (const e of SPK.parseMap(id).entities) if (e.kind === '*') spots.push(e.id);
-  assert.equal(spots.length, 7);
+  assert.equal(spots.length, 10);
   for (const id of spots) assert.ok(SPK.FRIENDS[id] && SPK.FRIENDS[id].emoji && SPK.FRIENDS[id].name, `${id} has a friend`);
   for (const id of Object.keys(SPK.FRIENDS)) assert.ok(spots.includes(id), `${id} is on a map`);
   const meadow = SPK.parseMap('meadow');
@@ -927,8 +927,8 @@ test('the friends book lists every friend in a fixed order with found flags', ()
   const ids = Object.keys(SPK.FRIENDS);
   SPK.meetFriend(g, ids[2]);
   const book = SPK.friendsBook(g);
-  assert.equal(book.length, 7);
-  assert.deepEqual(book.map((b) => b.found), [false, false, true, false, false, false, false]);
+  assert.equal(book.length, 10);
+  assert.deepEqual(book.map((b) => b.found), [false, false, true, false, false, false, false, false, false, false]);
   assert.equal(book[2].emoji, SPK.FRIENDS[ids[2]].emoji);
 });
 
@@ -1010,4 +1010,104 @@ test('once the way to the woods is open, the trail no longer drags you back to t
   g.map = 'grotto';
   assert.equal(SPK.stage(g).key, 'glow');
   assert.equal(tileOf(SPK.nextGoal(g)), 'grotto:32,4');
+});
+
+// ── Slice 3, Task 1: Crystal Lake, Cloud Cave, gaps and Cloud Hop, frogs ─
+// Flood fill that knows about water (bubble) and gaps (hop).
+function reach(mapId, sx, sy, powers) {
+  const m = SPK.parseMap(mapId);
+  const ctx = { broken: m.entities.filter((e) => e.kind === 'B').map((e) => e.id), powers };
+  const seen = new Set([`${sx},${sy}`]); const q = [[sx, sy]];
+  while (q.length) {
+    const [x, y] = q.pop();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      let n = SPK.isSolid(m, x + dx, y + dy, ctx) ? null : { tx: x + dx, ty: y + dy };
+      if (!n && powers.hop) n = SPK.hopLanding(m, x, y, dx, dy, ctx);
+      if (!n || seen.has(`${n.tx},${n.ty}`)) continue;
+      seen.add(`${n.tx},${n.ty}`); q.push([n.tx, n.ty]);
+    }
+  }
+  return (id) => { const e = SPK.entity(id); return seen.has(`${e.tx},${e.ty}`); };
+}
+const keyThings = (mapId) => SPK.parseMap(mapId).entities.filter((e) => 'CHFP*DU>LW'.includes(e.kind) && e.kind !== 'L').map((e) => e.id);
+
+test('crystal lake is east of the woods; only its islands need Bubble Hooves', () => {
+  const m = SPK.parseMap('lake');
+  assert.equal(m.w, 52); assert.equal(m.h, 34);
+  assert.equal(SPK.DOORS['woods:>:55,14'].at, 'lake:>:0,16');
+  assert.equal(SPK.DOORS['lake:>:0,16'].at, 'woods:>:55,14');
+  assert.equal(SPK.DOORS['lake:D:28,16'].at, 'cloud:U:1,10');
+  assert.deepEqual({ ...SPK.doorArrival('lake:>:0,16') }, { map: 'lake', tx: 1, ty: 16 });
+  assert.deepEqual({ ...SPK.doorArrival('woods:>:55,14') }, { map: 'woods', tx: 54, ty: 14 });
+  assert.deepEqual({ ...SPK.doorArrival('lake:D:28,16') }, { map: 'lake', tx: 28, ty: 17 });
+  const ISLANDS = ['lake:C:25,19', 'lake:C:22,23', 'lake:*:35,11', 'lake:D:28,16'];
+  const dry = reach('lake', 1, 16, {}), wet = reach('lake', 1, 16, { bubble: true });
+  for (const id of keyThings('lake')) {
+    if (ISLANDS.includes(id)) assert.ok(!dry(id) && wet(id), `${id} needs Bubble Hooves`);
+    else assert.ok(dry(id), `${id} reachable from the shore`);
+  }
+  assert.ok(reach('woods', 0, 14, {})('woods:>:55,14'), 'the woods path leads east to the lake');
+});
+
+test('cloud cave: the pedestal is reachable on foot; the room past the cloud gap needs Cloud Hop', () => {
+  const m = SPK.parseMap('cloud');
+  assert.equal(m.w, 34); assert.equal(m.h, 22);
+  assert.ok(m.cave && !m.dark, 'a bright cave');
+  assert.equal(SPK.DOORS['cloud:U:1,10'].at, 'lake:D:28,16');
+  const HOP_ROOM = ['cloud:C:28,17', 'cloud:H:31,18', 'cloud:*:29,12'];
+  const walk = reach('cloud', 1, 10, { bubble: true }), hop = reach('cloud', 1, 10, { bubble: true, hop: true });
+  for (const id of keyThings('cloud')) {
+    if (HOP_ROOM.includes(id)) assert.ok(!walk(id) && hop(id), `${id} needs Cloud Hop`);
+    else assert.ok(walk(id), `${id} reachable on foot`);
+  }
+  assert.equal(SPK.PEDESTALS['cloud:P:30,3'].power, 'hop');
+});
+
+test('hopLanding hops 1-3 gap tiles to open ground, and refuses blocked or too-wide gaps', () => {
+  SPK.MAPS.thop = { rows: [
+    '############',
+    '#.vv.......#',
+    '#.vvvv.....#',
+    '#.vvT......#',
+    '#..........#',
+    '#.v........#',
+    '############'] };
+  const m = SPK.parseMap('thop');
+  assert.deepEqual({ ...SPK.hopLanding(m, 1, 1, 1, 0, null) }, { tx: 4, ty: 1 });
+  assert.equal(SPK.hopLanding(m, 1, 2, 1, 0, null), null, 'four gap tiles is too far');
+  assert.equal(SPK.hopLanding(m, 1, 3, 1, 0, null), null, 'a tree on the far side');
+  assert.equal(SPK.hopLanding(m, 1, 4, 1, 0, null), null, 'no gap in the way');
+  assert.deepEqual({ ...SPK.hopLanding(m, 3, 5, -1, 0, null) }, { tx: 1, ty: 5 }, 'hops either way');
+  assert.equal(SPK.isSolid(m, 2, 1, null), true, 'you cannot walk into a gap');
+  assert.equal(SPK.isSolid(m, 2, 1, { fly: true }), false, 'bees fly over gaps');
+  delete SPK.MAPS.thop;
+});
+
+test('cloud hop: leaning into a gap for 0.25s hops, but only with the power', () => {
+  const g = SPK.createGame('easy');
+  assert.equal(SPK.hopTick(g, 'thop:2,1', 1), false, 'no power, no hop');
+  g.powers.hop = true;
+  assert.equal(SPK.hopTick(g, 'thop:2,1', 0.1), false);
+  assert.equal(SPK.hopTick(g, 'thop:2,1', 0.1), false);
+  assert.equal(SPK.hopTick(g, 'thop:2,1', 0.06), true);
+  assert.equal(SPK.hopTick(g, 'thop:2,1', 0.1), false, 'starts over after a hop');
+  SPK.hopTick(g, null, 0.1);
+  assert.equal(SPK.hopTick(g, 'thop:2,1', 0.2), false, 'letting go resets the lean');
+});
+
+test('splash frogs hop and spit slow water drops; bees and frogs never walk on water', () => {
+  const f = SPK.ENEMIES.frog;
+  assert.equal(f.hp, 2);
+  assert.ok(f.spit.speed < SPK.ENEMIES.mushroom.spore.speed + 0.01 && f.spit.windup >= 0.5, 'slow and telegraphed');
+  const m = SPK.parseMap('lake');
+  assert.equal(SPK.isSolid(m, 20, 12, { powers: { bubble: true } }), false, 'you walk on water with Bubble Hooves');
+  assert.equal(SPK.isSolid(m, 20, 12, { broken: [] }), true, 'enemies (no powers) do not');
+  assert.equal(SPK.isSolid(m, 14, 16, null), false, 'lily pads are walkable');
+});
+
+test('a lake or cloud save loads back where you were, even standing on a lily pad', () => {
+  const g = SPK.createGame('normal');
+  g.map = 'lake'; g.x = 14.5 * 32; g.y = 16.5 * 32; g.mode = 'play';
+  const back = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g)))));
+  assert.equal(back.map, 'lake'); assert.equal(back.x, 14.5 * 32);
 });

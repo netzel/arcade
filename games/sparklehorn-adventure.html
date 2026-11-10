@@ -84,6 +84,7 @@
   // D cave door  U cave exit  F campfire  C chest  H heart piece  S slimes
   // M mushrooms  P power pedestal  @ start  = cave floor
   // > path to the next area  * star friend  g glowshroom  L landmark  a bats
+  // o lily pad  v sky gap (Cloud Hop)  W the closet  f frogs  z bees
   SPK.MAPS = {
     meadow: { name: 'Sunny Meadow', floor: '.', rows: [
       'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
@@ -206,7 +207,7 @@
       'TT.TTT.T,T....:.T..M.....T..g.....S..TT...g..T.....T..TT',
       'TT.T...T.T..T.:........T...TT..T.....T.T.T......T.,TTTTT',
       'TT............:...........................Tg.....TT.TTTT',
-      '>::::::::::::::::::::::::::::::::::::::::..T..TT.....TTT',
+      '>::::::::::::::::::::::::::::::::::::::::::::::::::::::>',
       'TT......................................:.....T...M...TT',
       'TT.........TTT..TTT.......,..T.....,....:.T...g.T....TTT',
       'TT.TT.F..g......T....S.T..T.....T.......:.......gTT.T.TT',
@@ -229,11 +230,107 @@
       'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
       'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
     ] },
+    lake: { name: 'Crystal Lake', floor: '.', theme: 'lake', rows: [
+      'TTTTTTTTTTTTTTTTTTTTTTTTTT>TTTTTTTTTTTTTTTTTTTTTTTTT',
+      'TTTTTTTTTTTTTTTTTTTTTTTTTT:TTTTTTTTTTTTTTTTTTTTTTTTT',
+      'TT...,....................:..T.T.T......,...T..,..TT',
+      'TT......:::::::::::::::::::.....TT...,.......,....TT',
+      'TT..C...:.........................T............C..TT',
+      'TT......:...T.....,,T...T.......,.....f..,........TT',
+      'TT....T.:..,......T,...,,,.T~T...TT......T.....,..TT',
+      'TT..,...:.....T....T.~o~~~~~~~~~~o~~........,...,,TT',
+      'TT......:.....TT,,.~~~~~~~~~~~~~~~~~~~............TT',
+      'TT...L..:........~~~~~~~~~~~~~~~~~~~~~~~..........TT',
+      'TT......:..,...~~~~~~~~~~~~~~~~~~~...~~~~~.....T..TT',
+      'TT......:.....~~~~~~~~~~~~~~~~~~~..*..~~~~~..,....TT',
+      'TT......:..,.~~~~~~~~~~~~~~~~~~~~~...~~~~~~~T..T.,TT',
+      'TT......:....~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~......TT',
+      'TT......:...~o~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~.,...TT',
+      'TT......:...~~~~~~~~~~~~~~#####~~~~~~~~~~~~~~..,..TT',
+      '>::::::::..,~~o~~~~~~~~~..##D##..~~~~~~~~~~~~..T.TTT',
+      'TT.........~o~~~~~~~~~~...........~~~~~~~~~~~~..HTTT',
+      'TT,...F.....~~~~~~~~~~~...........~~~~~~~~~~~T.TTTTT',
+      'TT.T......T.~o~~~~~~~~~,.C...,T...~~~~~~~~~~~.....TT',
+      'TT....T,....~~~~~~~~~~~~......T..~~~~~~~~~~~o..,..TT',
+      'TT,.,.T..,...~~o~~~~~~~~~~~..T~~~~~~~~~~~~~~....T.TT',
+      'TT.........,.~~~~~~~~...~~~~~~~~~~~~~~~~~~~~..f...TT',
+      'TT.....T....,.~~~~~~..C..~~~~~~~~~~~~~~~~~~.......TT',
+      'TT.............~~~~~~...~~~~~~~~~~~~~~~~~~.T.....TTT',
+      'TT...TT...f.,....~~~~~~~~~~~~~~~~~~~~~~~...,,..T..TT',
+      'TT....,,...........~~~~~~~~~~~~~~~~o~~T.....,...T.TT',
+      'TT.,..T.......,...,.,~~~o~~~~~o~~~~~.......TT....,TT',
+      'TT...,....T....,............~......TT,......T.....TT',
+      'TT...............T.......,..,..f....,,...T.,....C.TT',
+      'TTT..C..,......,....S....,,.......,...............TT',
+      'TT,......T.....,..,......,.TT....T......S......,..TT',
+      'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+      'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+    ] },
+    hills: { name: 'Windy Hills', floor: '.', theme: 'hills', rows: [
+      'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+      'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+      'TT........,........,T.#...T.T.....T.....,.......TT',
+      'TT,...,.....C..T.......,.......C.#........#.T...TT',
+      'TT................,.F.....L...........,.z.......TT',
+      'TT........,#......#....T......,.............,..TTT',
+      'TT..............................................TT',
+      'TTvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvTT',
+      'TTvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvTT',
+      'TT......................vv......................TT',
+      'TT.............,,..TT.,.vv..T....,...........,..TT',
+      'TT...*....,.....,,......vv.#.....T......z.......TT',
+      'TTT.........z...........vv..,.........,.....H...TT',
+      'TT.....,.,T....T....T...vv.T,.....T.............TT',
+      'TTT.#..,.............,..vv....S......,.,...,...,TT',
+      'TT...,.,,.C.....T.,.....vv..,...............,...TT',
+      'TT...,,.......,.,.,..T..vv............C.......,.TT',
+      'TT,....,T......,..,.....vv.#........,...,.......TT',
+      'TT......................vv......................TT',
+      'TTvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvTT',
+      'TTvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvTT',
+      'TT..............................................TT',
+      'TT.,.......,.,..T..,...,.....T,......,..,,...,,.TT',
+      'TT.T......,..T,........,.............#..T.......TT',
+      'TT.,..#....T....T..,..,........,T........,T.....TT',
+      'TT#.....T.T..,..T..,................z.....T.,...TT',
+      'TT.#............,#..,.,..:.,...,.T,...,......,..TT',
+      'TT........S.,..#..,......:........,......,..,,..TT',
+      'TT,,.........,,.......F..:....,.................TT',
+      'TT...T.....#....,........:..........,......#....TT',
+      'TT......,..,.............:....#,....T...C.,..,..TT',
+      'TT,T..C..,......,.,......:....#..T........#..#T,TT',
+      'TTTTTTTTTTTTTTTTTTTTTTTTT:TTTTTTTTTTTTTTTTTTTTTTTT',
+      'TTTTTTTTTTTTTTTTTTTTTTTTT>TTTTTTTTTTTTTTTTTTTTTTTT',
+    ] },
+    cloud: { name: 'Cloud Cave', floor: '=', cave: true, theme: 'cloud', rows: [
+      '##################################',
+      '##################################',
+      '############====================##',
+      '############==C=========a=====P=##',
+      '############====================##',
+      '##################==##############',
+      '###############========###########',
+      '#=========#####======C=###########',
+      '#=========#####========vvv=======#',
+      '#===F=====#####========vvv=======#',
+      '#U=====================vvv=======#',
+      '#======================vvv=======#',
+      '#=====C===#####========vvv===*===#',
+      '#=========#####===S====vvv=======#',
+      '###############========vvv=======#',
+      '###############========vvv===a===#',
+      '###############========vvv=======#',
+      '###############========vvv==C====#',
+      '###############========vvv=====H=#',
+      '###############========vvv=======#',
+      '##################################',
+      '##################################',
+    ] },
   };
 
-  SPK.LEGEND = '.,:T~#BDUFCHSMP@=>*gLa';
-  var SOLID = { T: 1, '~': 1, '#': 1, B: 1, L: 1 };
-  var ENTITY = { B: 1, D: 1, U: 1, F: 1, C: 1, H: 1, S: 1, M: 1, P: 1, '@': 1, '>': 1, '*': 1, L: 1, a: 1 };
+  SPK.LEGEND = '.,:T~#BDUFCHSMP@=>*gLaovWfz';
+  var SOLID = { T: 1, '~': 1, '#': 1, B: 1, L: 1, v: 1, W: 1 };
+  var ENTITY = { B: 1, D: 1, U: 1, F: 1, C: 1, H: 1, S: 1, M: 1, P: 1, '@': 1, '>': 1, '*': 1, L: 1, a: 1, W: 1, f: 1, z: 1 };
   SPK.EXITS = { D: 1, U: 1, '>': 1 };
   var mapCache = {};
 
@@ -265,13 +362,14 @@
 
   function has(list, v) { return !!list && (typeof list.has === 'function' ? list.has(v) : list.indexOf(v) >= 0); }
 
-  // ctx = { broken: [ids] | Set, powers }
+  // ctx = { broken: [ids] | Set, powers, fly } — fly: bees, bats and spit cross water and gaps
   SPK.isSolid = function (map, tx, ty, ctx) {
     if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return true;
     var ch = SPK.LEGEND[map.tiles[ty * map.w + tx]];
     if (!SOLID[ch]) return false;
     if (ch === 'B') return !has(ctx && ctx.broken, map.id + ':B:' + tx + ',' + ty);
-    if (ch === '~' && ctx && ctx.powers && ctx.powers.bubble) return false;
+    if (ch === '~' && ctx && (ctx.fly || (ctx.powers && ctx.powers.bubble))) return false;
+    if (ch === 'v' && ctx && ctx.fly) return false;
     return true;
   };
 
@@ -318,6 +416,12 @@
     'grotto:U:1,12': { to: 'woods', at: 'woods:D:30,4' },
     'woods:D:51,26': { to: 'bubble', at: 'bubble:U:32,11' },
     'bubble:U:32,11': { to: 'woods', at: 'woods:D:51,26' },
+    'woods:>:55,14': { to: 'lake', at: 'lake:>:0,16' },
+    'lake:>:0,16': { to: 'woods', at: 'woods:>:55,14' },
+    'lake:D:28,16': { to: 'cloud', at: 'cloud:U:1,10' },
+    'cloud:U:1,10': { to: 'lake', at: 'lake:D:28,16' },
+    'lake:>:26,0': { to: 'hills', at: 'hills:>:25,33' },
+    'hills:>:25,33': { to: 'lake', at: 'lake:>:26,0' },
   };
 
   SPK.entity = function (id) {
@@ -351,6 +455,7 @@
     'pebble:P:27,11': { power: 'mighty', item: '🌟', picture: ['🪨', '➡️', '🦄', '💥'], text: 'Mighty Horn! Bonk cracked rocks!' },
     'grotto:P:32,4':  { power: 'glow',   item: '💡', picture: ['🦄', '💡', '🕳️', '👀'], text: 'Glow Horn! Light up dark caves!' },
     'bubble:P:3,3':   { power: 'bubble', item: '🫧', picture: ['🦄', '🫧', '🌊', '➡️'], text: 'Bubble Hooves! Walk on water!' },
+    'cloud:P:30,3':   { power: 'hop',    item: '☁️', picture: ['🦄', '☁️', '🕳️', '➡️'], text: 'Cloud Hop! Hop over gaps!' },
   };
   SPK.takePedestal = function (state, id) {
     var p = SPK.PEDESTALS[id];
@@ -374,6 +479,8 @@
     slimeMini: { hp: 1, speed: 1.6, sense: 5, touch: 1 },
     mushroom:  { hp: 3, speed: 0.8, sense: 6, touch: 1, spore: { every: 2.2, windup: 0.6, speed: 2.5, dmg: 1 } },
     bat:       { hp: 1, speed: 1.6, sense: 5, touch: 1, dive: { every: 2.4, windup: 0.4, speed: 5, dur: 0.45 } },
+    frog:      { hp: 2, speed: 1.4, sense: 6, touch: 1, spit: { every: 2.6, windup: 0.6, speed: 2.2, dmg: 1 } },
+    bee:       { hp: 2, speed: 1.8, sense: 6, touch: 1, dive: { every: 2.8, windup: 0.55, speed: 4.5, dur: 0.5 } },
   };
 
   function angleDiff(a, b) { var d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; }
@@ -466,6 +573,28 @@
     return false;
   };
 
+  // Cloud Hop: from (tx,ty), heading (dx,dy), hop over 1-3 gap tiles onto
+  // the first open tile beyond. null if there's no gap, it's too wide, or
+  // the far side is blocked.
+  SPK.HOP_MAX = 3;
+  SPK.hopLanding = function (map, tx, ty, dx, dy, ctx) {
+    var k = 1;
+    while (k <= SPK.HOP_MAX && SPK.tileAt(map, tx + dx * k, ty + dy * k) === 'v') k++;
+    if (k === 1) return null; // (a 4th gap tile ahead is solid, so too-wide gaps fail below)
+    var lx = tx + dx * k, ly = ty + dy * k;
+    return SPK.isSolid(map, lx, ly, ctx) ? null : { tx: lx, ty: ly };
+  };
+  // Leaning into a gap with Cloud Hop hops it after 0.25s (both modes, §14.3).
+  SPK.HOP_SECS = 0.25;
+  SPK.hopTick = function (state, gapKey, dt) {
+    var h = state.fx.lean || (state.fx.lean = { id: null, t: 0 });
+    if (!gapKey || !state.powers.hop) { h.id = null; h.t = 0; return false; }
+    if (h.id !== gapKey) { h.id = gapKey; h.t = 0; }
+    h.t += dt;
+    if (h.t >= SPK.HOP_SECS - 1e-9) { h.id = null; h.t = 0; return true; }
+    return false;
+  };
+
   // ── Short-term power-ups ─────────────────────────────────────────────
   SPK.POWERUPS = {
     starBurst: { secs: 15, icon: '🌟' },
@@ -548,6 +677,22 @@
     'bubble:C:5,17':  { powerup: 'swirl' },
     'bubble:C:25,18': { gems: 9 },
     'bubble:C:15,11': { gems: 20 },             // on the island
+    'lake:C:4,4':     { gems: 8 },
+    'lake:C:47,4':    { powerup: 'rainbow' },
+    'lake:C:5,30':    { gems: 9 },
+    'lake:C:48,29':   { gems: 10 },
+    'lake:C:25,19':   { gems: 12 },             // on the cloud island
+    'lake:C:22,23':   { powerup: 'starBurst' }, // on the little island
+    'cloud:C:21,7':   { gems: 10 },
+    'cloud:C:14,3':   { powerup: 'swirl' },
+    'cloud:C:28,17':  { gems: 15 },             // past the cloud gap
+    'cloud:C:6,12':   { gems: 6 },
+    'hills:C:40,30':  { gems: 8 },
+    'hills:C:6,31':   { gems: 6 },
+    'hills:C:10,15':  { powerup: 'mega' },
+    'hills:C:38,16':  { gems: 12 },
+    'hills:C:31,3':   { upgrade: 'doubleSparkle' }, // by the windmill, top plateau
+    'hills:C:12,3':   { gems: 15 },
   };
 
   // ── Star Friends ─────────────────────────────────────────────────────
@@ -559,6 +704,9 @@
     'woods:*:36,9':   { emoji: '🐿️', name: 'Squirrel' },
     'grotto:*:4,21':  { emoji: '🐌', name: 'Snail' },
     'bubble:*:15,13': { emoji: '🐢', name: 'Turtle' },
+    'lake:*:35,11':   { emoji: '🦆', name: 'Duck' },
+    'cloud:*:29,12':  { emoji: '🐲', name: 'Baby Dragon' },
+    'hills:*:5,11':   { emoji: '🐑', name: 'Lamb' },
   };
   SPK.meetFriend = function (state, id) {
     var f = SPK.FRIENDS[id];
@@ -666,7 +814,7 @@
   SPK.hintDiscovery = function (h, clock) { h.last = clock; h.hidden = false; };
 
   // ── Map screen ───────────────────────────────────────────────────────
-  SPK.MAP_ICON = { meadow: '🌼', woods: '🍄', pebble: '🪨', grotto: '💡', bubble: '🫧' };
+  SPK.MAP_ICON = { meadow: '🌼', woods: '🍄', pebble: '🪨', grotto: '💡', bubble: '🫧', lake: '💎', cloud: '☁️', hills: '🌬️' };
   // What the map screen shows for one map: only things on tiles you've seen.
   SPK.mapMarks = function (state, mapId) {
     var ex = state.explored[mapId], out = [];
@@ -1041,10 +1189,12 @@
     map = SPK.parseMap(id);
     chunks = {};
     if (!state.explored[id]) state.explored[id] = new Uint8Array(map.w * map.h);
-    bolts = []; pickups = []; parts = []; trail = []; horn.dash = null;
+    bolts = []; pickups = []; parts = []; trail = []; horn.dash = null; hop = null;
     spawnGroups(state.x, state.y);
   }
   function collideCtx() { return { broken: state.broken, powers: state.powers }; }
+  // Enemies never use your powers: no walking on water just because you can.
+  function enemyCtx(fly) { return { broken: state.broken, fly: !!fly }; }
   function tileUnder(x, y) { return SPK.tileAt(map, Math.floor(x / TILE), Math.floor(y / TILE)); }
   function teleport(mapId, tx, ty) {
     state.map = mapId;
@@ -1088,17 +1238,19 @@
       return { x: (e.tx + 0.5) * TILE, y: (e.ty + 0.5) * TILE, lit: function () { return state.campfires.indexOf(e.id) >= 0; } };
     });
     map.entities.forEach(function (g, gi) {
-      if (g.kind !== 'S' && g.kind !== 'M' && g.kind !== 'a') return;
+      if (g.kind !== 'S' && g.kind !== 'M' && g.kind !== 'a' && g.kind !== 'f' && g.kind !== 'z') return;
       var cx = (g.tx + 0.5) * TILE, cy = (g.ty + 0.5) * TILE;
       if (Math.hypot(cx - avoidX, cy - avoidY) < 5 * TILE) return; // never pop up right next to you
       var list = g.kind === 'S'
         ? (gi % 3 === 0 ? ['slimeBig', 'slime', 'slime'] : ['slime', 'slime', 'slime', 'slime'].slice(0, 2 + gi % 3))
         : g.kind === 'a' ? ['bat', 'bat', 'bat'].slice(0, 2 + gi % 2)
+        : g.kind === 'f' ? ['frog', 'frog', 'frog'].slice(0, 2 + gi % 2)
+        : g.kind === 'z' ? ['bee', 'bee', 'bee'].slice(0, 2 + gi % 2)
         : ['mushroom', 'mushroom', 'slime'];
       list.forEach(function (kind, i) {
         var a = i * 2.4, rr = i ? TILE * 0.9 : 0;
         var x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
-        if (SPK.isSolid(map, Math.floor(x / TILE), Math.floor(y / TILE), collideCtx())) { x = cx; y = cy; }
+        if (SPK.isSolid(map, Math.floor(x / TILE), Math.floor(y / TILE), enemyCtx())) { x = cx; y = cy; }
         spawnEnemy(kind, x, y, g.id);
       });
     });
@@ -1146,19 +1298,20 @@
       active++;
       var def = SPK.ENEMIES[e.kind], senses = dist < def.sense * TILE;
       e.t += dt; e.flash = Math.max(0, e.flash - dt); e.squish = Math.max(0, e.squish - dt * 3);
-      if (e.kind === 'bat') { updateBat(e, def, d, dx, dy, senses, dt); if (dist < TILE * 0.55) playerHit(SPK.enemyHit(state, def.touch), e.x, e.y); continue; }
-      if (e.kind === 'mushroom') {
+      if (def.dive) { updateBat(e, def, d, dx, dy, senses, dt); if (dist < TILE * 0.55) playerHit(SPK.enemyHit(state, def.touch), e.x, e.y); continue; }
+      var shot = def.spore || def.spit; // mushrooms puff spores, frogs spit water drops
+      if (shot) {
         if (e.windup > 0) {
           e.windup -= dt; e.squish = 0.6;
           if (e.windup <= 0) {
-            var a = Math.atan2(dy, dx), sp = def.spore.speed * TILE;
-            spores.push({ x: e.x, y: e.y - 4, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 3, dmg: def.spore.dmg });
-            e.cd = def.spore.every / d.enemyAtk;
+            var a = Math.atan2(dy, dx), sp = shot.speed * TILE;
+            spores.push({ x: e.x, y: e.y - 4, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 3, dmg: shot.dmg, water: !!def.spit });
+            e.cd = shot.every / d.enemyAtk;
           }
           continue;
         }
         e.cd -= dt;
-        if (senses && e.cd <= 0) { e.windup = def.spore.windup; continue; }
+        if (senses && e.cd <= 0) { e.windup = shot.windup; continue; }
       }
       // slimes hop; mushrooms shuffle
       e.hopT -= dt;
@@ -1175,7 +1328,7 @@
         var nx = e.x + e.vx * dt, ny = e.y + e.vy * dt;
         if (nearFire(nx, ny) && !nearFire(e.x, e.y)) { e.hop = 0; }
         else {
-          var res = SPK.moveAndSlide(map, { x: e.x, y: e.y, r: TILE * 0.28 }, e.vx * dt, e.vy * dt, collideCtx());
+          var res = SPK.moveAndSlide(map, { x: e.x, y: e.y, r: TILE * 0.28 }, e.vx * dt, e.vy * dt, enemyCtx());
           e.x = res.x; e.y = res.y;
         }
       }
@@ -1186,7 +1339,7 @@
     for (var s = spores.length - 1; s >= 0; s--) {
       var p = spores[s];
       p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
-      if (p.life <= 0 || SPK.isSolid(map, Math.floor(p.x / TILE), Math.floor(p.y / TILE), collideCtx())) { spores.splice(s, 1); continue; }
+      if (p.life <= 0 || SPK.isSolid(map, Math.floor(p.x / TILE), Math.floor(p.y / TILE), enemyCtx(true))) { spores.splice(s, 1); continue; }
       if (Math.hypot(p.x - state.x, p.y - state.y) < TILE * 0.45) { spores.splice(s, 1); playerHit(SPK.enemyHit(state, p.dmg), p.x, p.y); }
     }
   }
@@ -1215,7 +1368,7 @@
       if (senses && e.cd <= 0) { e.windup = def.dive.windup; e.cd = def.dive.every / d.enemyAtk; }
     }
     if (nearFire(e.x + mv.x, e.y + mv.y) && !nearFire(e.x, e.y)) { e.dive = 0; return; }
-    var res = SPK.moveAndSlide(map, { x: e.x, y: e.y, r: TILE * 0.22 }, mv.x, mv.y, collideCtx());
+    var res = SPK.moveAndSlide(map, { x: e.x, y: e.y, r: TILE * 0.22 }, mv.x, mv.y, enemyCtx(true));
     if (e.dive > 0 && res.hit.length) e.dive = 0;
     e.x = res.x; e.y = res.y;
   }
@@ -1274,6 +1427,8 @@
     var res = SPK.moveAndSlide(map, { x: state.x, y: state.y, r: BODY_R }, Math.cos(h.dir) * step, Math.sin(h.dir) * step, collideCtx());
     state.x = res.x; state.y = res.y;
     onHornContact(res.hit);
+    var hl = state.powers.hop && gapAhead({ x: Math.cos(h.dir), y: Math.sin(h.dir) }, res.hit);
+    if (hl) { horn.dash = null; startHop(hl.land); return; }
     burst(state.x, state.y, 1, ['#f0abfc', '#ffffff'], 20);
     for (var i = 0; i < enemies.length; i++) {
       var e = enemies[i];
@@ -1306,7 +1461,7 @@
 
   // Filled in by later tasks (hearts, boulders, quests).
   function playerHit(n, fromX, fromY) {
-    if (horn.dash || state.mode !== 'play') return;
+    if (horn.dash || hop || state.mode !== 'play') return;
     var r = SPK.hurt(state, n, now());
     if (r === 'immune') return;
     var a = Math.atan2(state.y - fromY, state.x - fromX);
@@ -1330,6 +1485,35 @@
     sfx('crumble');
     onDiscovery();
   }
+  // ── Cloud Hop ────────────────────────────────────────────────────────
+  var hop = null;
+  // The gap you're pushing into (straight ahead on your main axis), and where you'd land.
+  function gapAhead(v, hits) {
+    var touching = false;
+    for (var i = 0; i < hits.length; i++) if (hits[i].code === 'v') touching = true;
+    if (!touching) return null;
+    var dx = 0, dy = 0;
+    if (Math.abs(v.x) >= Math.abs(v.y)) dx = v.x > 0 ? 1 : -1; else dy = v.y > 0 ? 1 : -1;
+    var tx = Math.floor(state.x / TILE), ty = Math.floor(state.y / TILE);
+    if (SPK.tileAt(map, tx + dx, ty + dy) !== 'v') return null;
+    var land = SPK.hopLanding(map, tx, ty, dx, dy, collideCtx());
+    return land ? { key: map.id + ':' + (tx + dx) + ',' + (ty + dy), land: land } : null;
+  }
+  function startHop(land) {
+    hop = { x0: state.x, y0: state.y, x1: (land.tx + 0.5) * TILE, y1: (land.ty + 0.5) * TILE, t: 0 };
+    hop.dur = 0.35 + 0.08 * Math.hypot(hop.x1 - hop.x0, hop.y1 - hop.y0) / TILE;
+    state.fx.lean = null;
+    burst(state.x, state.y + 10, 10, ['#ffffff', '#e0f2fe', '#bae6fd'], 70);
+    sfx('hop');
+  }
+  function updateHop(dt) {
+    hop.t += dt;
+    var k = Math.min(1, hop.t / hop.dur);
+    state.x = hop.x0 + (hop.x1 - hop.x0) * k; state.y = hop.y0 + (hop.y1 - hop.y0) * k;
+    if (k >= 1) { burst(state.x, state.y + 10, 12, ['#ffffff', '#e0f2fe', '#bae6fd'], 80); hop = null; sfx('bonk'); }
+  }
+  function hopLift() { return hop ? Math.sin(Math.min(1, hop.t / hop.dur) * Math.PI) * TILE * 0.9 : 0; }
+
   function onHornContact(hits) {
     var id = boulderIdFrom(hits);
     if (id && state.powers.mighty) breakBoulder(id);
@@ -1388,7 +1572,7 @@
   // Everything is drawn on the canvas; taps hit-test against mapUI.hits.
   var mapUI = null;
   var MINI = { '.': '#86d47a', ',': '#a7e08f', ':': '#ecd9a8', '>': '#ecd9a8', T: '#2f7d3f', '~': '#5aa9f5', '#': '#8a8480', B: '#9ca3af',
-               D: '#1c1917', U: '#fde68a', '=': '#8f7c68', g: '#7dd3c0', L: '#ef4444' };
+               D: '#1c1917', U: '#fde68a', '=': '#8f7c68', g: '#7dd3c0', L: '#ef4444', o: '#22a35a', v: '#e0f2fe', W: '#b45309' };
   function openMap() {
     mapUI = { mapId: map.id, page: 'map', hits: [], openedAt: now(), mini: null };
     state.mode = 'mapview';
@@ -1766,6 +1950,8 @@
         case 'bonk': tone(300, { dur: 0.07, type: 'square', vol: 0.05, slide: -120 }); break;
         case 'sparkle': tone(1320, { dur: 0.06, vol: 0.05 }); tone(1760, { at: 0.03, dur: 0.06, vol: 0.04 }); break;
         case 'whoosh': tone(220, { dur: 0.18, type: 'sawtooth', vol: 0.04, slide: 440 }); break;
+        case 'hop': tone(392, { dur: 0.3, type: 'sine', vol: 0.1, slide: 600 }); tone(784, { at: 0.08, dur: 0.2, vol: 0.05 }); break;
+        case 'drip': tone(1200, { dur: 0.08, vol: 0.05, slide: -700 }); break;
         case 'gem': tone(1568, { dur: 0.07, vol: 0.06 }); tone(2093, { at: 0.04, dur: 0.08, vol: 0.05 }); break;
         case 'heal': [659, 784, 988].forEach(function (f, i) { tone(f, { at: i * 0.06, dur: 0.12, vol: 0.07 }); }); break;
         case 'hurt': tone(330, { dur: 0.16, type: 'triangle', vol: 0.12, slide: -160 }); break;
@@ -1842,11 +2028,12 @@
     if (state.mode !== 'play') return;
     if (hitPause > 0) { hitPause -= dt; return; }
     shake = Math.max(0, shake - dt);
-    var v = horn.dash ? { x: 0, y: 0 } : moveVec();
+    var v = horn.dash || hop ? { x: 0, y: 0 } : moveVec();
     var t = input.consumeTap();
     if (t) walkTo = screenToWorld(t.x, t.y);
     if (v.x || v.y || horn.dash) walkTo = null;
-    else if (walkTo) {
+    if (hop) { updateHop(dt); v = { x: 0, y: 0 }; }
+    else if (walkTo && !hop) {
       var dx = walkTo.x - state.x, dy = walkTo.y - state.y, d = Math.hypot(dx, dy);
       if (d < 4) walkTo = null; else v = { x: dx / d, y: dy / d };
     }
@@ -1854,15 +2041,16 @@
     if (v.x || v.y) {
       var sp = SPEED * SPK.speedMul(state, now());
       var res = SPK.moveAndSlide(map, { x: state.x, y: state.y, r: BODY_R }, v.x * sp * dt, v.y * sp * dt, collideCtx());
-      var bid = boulderIdFrom(res.hit);
-      // A tap-walk stops at a wall, but keeps pushing a cracked rock you can
-      // bonk, so tap-to-walk players (Alana) open rocks just by tapping past them.
-      if (walkTo && res.hit.length && Math.hypot(res.x - state.x, res.y - state.y) < 0.5 && !(bid && state.powers.mighty)) walkTo = null;
+      var bid = boulderIdFrom(res.hit), gap = state.powers.hop ? gapAhead(v, res.hit) : null;
+      // A tap-walk stops at a wall, but keeps pushing a cracked rock you can bonk
+      // or a gap you can hop, so tap-to-walk players (Alana) pass gates just by tapping past them.
+      if (walkTo && res.hit.length && Math.hypot(res.x - state.x, res.y - state.y) < 0.5 && !(bid && state.powers.mighty) && !gap) walkTo = null;
       state.x = res.x; state.y = res.y;
       state.facing = Math.atan2(v.y, v.x);
       if (bid && state.powers.mighty && Math.random() < 0.3) burst(state.x + Math.cos(state.facing) * TILE * 0.5, state.y + Math.sin(state.facing) * TILE * 0.5, 1, ['#9ca3af', '#d1d5db'], 30);
       if (SPK.bonkTick(state, bid, dt)) breakBoulder(bid);
-    } else SPK.bonkTick(state, null, dt);
+      if (SPK.hopTick(state, gap && gap.key, dt)) startHop(gap.land);
+    } else { SPK.bonkTick(state, null, dt); SPK.hopTick(state, null, dt); }
     touchThings();
     // doors: step off a door before it can take you anywhere again
     var under = tileUnder(state.x, state.y);
@@ -1921,6 +2109,9 @@
     cave:   { floor: ['#7c6a58', '#76644f', '#8f7c68'], wall: ['#3d3530', '#2b2420'] },
     grotto: { floor: ['#5d4f73', '#57496c', '#6f6189'], wall: ['#2e2540', '#1f1830'] },
     bubble: { floor: ['#4f6478', '#4a5f72', '#62788d'], wall: ['#24323f', '#18232d'] },
+    lake:   { grass: ['#8fdc8a', '#86d483', '#71c070'], tree: ['#2a8f5c', '#33996a'] },
+    hills:  { grass: ['#a6d96a', '#9dd162', '#86bd4f'], tree: ['#3f8f3a', '#4b9b42'] },
+    cloud:  { floor: ['#eef2ff', '#e6ebff', '#c7d2fe'], wall: ['#a5b4fc', '#818cf8'] },
   };
   function theme() { return THEMES[map.theme] || THEMES.meadow; }
   function ground(c, ch, x, y, cave) {
@@ -1960,6 +2151,19 @@
       case '~':
         c.fillStyle = '#5aa9f5'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
         break;
+      case 'o': // lily pad
+        c.fillStyle = '#5aa9f5'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
+        c.fillStyle = '#22a35a'; c.beginPath(); c.moveTo(16, 16); c.arc(16, 16, 12, 0.35 + r, Math.PI * 2 - 0.35 + r); c.closePath(); c.fill();
+        c.strokeStyle = '#15803d'; c.lineWidth = 1.5; c.stroke();
+        if (r > 0.6) { c.fillStyle = '#f9a8d4'; c.beginPath(); c.arc(12, 13, 3.5, 0, 7); c.fill(); c.fillStyle = '#fde047'; c.beginPath(); c.arc(12, 13, 1.3, 0, 7); c.fill(); }
+        break;
+      case 'v': // a gap in the ground: sky and clouds far below
+        c.fillStyle = cave ? '#c7d2fe' : '#bfe6ff'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
+        c.fillStyle = 'rgba(255,255,255,.85)';
+        c.beginPath(); c.arc(6 + r * 18, 12 + r * 10, 5, 0, 7); c.arc(11 + r * 18, 10 + r * 10, 6, 0, 7); c.arc(16 + r * 18, 13 + r * 10, 4.5, 0, 7); c.fill();
+        if (SPK.tileAt(map, x, y - 1) !== 'v') { c.fillStyle = cave ? '#818cf8' : '#8a6b4a'; c.fillRect(-0.5, -0.5, TILE + 1, 7); c.fillStyle = cave ? '#a5b4fc' : '#6aa84f'; c.fillRect(-0.5, -0.5, TILE + 1, 3); }
+        if (SPK.tileAt(map, x, y + 1) !== 'v') { c.fillStyle = 'rgba(30,41,59,.18)'; c.fillRect(-0.5, TILE - 4, TILE + 1, 4.5); }
+        break;
       case '#':
         c.fillStyle = cave ? theme().wall[0] : '#a8a29e'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
         c.strokeStyle = cave ? theme().wall[1] : '#8a8480'; c.lineWidth = 2;
@@ -1992,7 +2196,7 @@
         ground(c, ch, x, y, cave);
     }
   }
-  var ON_FLOOR = { F: 1, C: 1, H: 1, S: 1, M: 1, P: 1, '@': 1, '*': 1, L: 1, a: 1 };
+  var ON_FLOOR = { F: 1, C: 1, H: 1, S: 1, M: 1, P: 1, '@': 1, '*': 1, L: 1, a: 1, W: 1, f: 1, z: 1 };
   function floorChar(ch) { return ON_FLOOR[ch] ? map.floor : ch; }
   function chunkRes() { return Math.min(3, Math.max(1, scale * DPR)); }
   function getChunk(cx, cy) {
@@ -2098,16 +2302,27 @@
           emoji(fd.emoji, x, y - Math.abs(Math.sin(clock * 2 + e.ty)) * 3, TILE * 0.62);
           ctx.fillStyle = '#fff'; ctx.fillRect(x + 9, y - 14 - tw * 3, 2, 6); ctx.fillRect(x + 7, y - 12 - tw * 3, 6, 2);
         }
-      } else if (e.kind === 'L') {
-        emoji('🍄', x, y - TILE * 0.55, TILE * 2.2);
-      }
+      } else if (e.kind === 'L') drawLandmark(x, y);
     }
+  }
+
+  // Each region's big landmark, so kids can find their way without a map.
+  function drawLandmark(x, y) {
+    if (map.theme === 'lake') { // the crystal
+      ctx.fillStyle = 'rgba(165,243,252,' + (0.3 + 0.12 * Math.sin(clock * 2)) + ')';
+      ctx.beginPath(); ctx.ellipse(x, y - TILE * 0.6, TILE * 1.1, TILE * 1.3, 0, 0, 7); ctx.fill();
+      emoji('💎', x, y - TILE * 0.6, TILE * 2);
+      ctx.fillStyle = '#fff'; var tw = 0.5 + 0.5 * Math.sin(clock * 2.4);
+      ctx.fillRect(x + 14, y - TILE * 1.4 - tw * 3, 2, 8); ctx.fillRect(x + 11, y - TILE * 1.4 + 3 - tw * 3, 8, 2);
+    } else emoji('🍄', x, y - TILE * 0.55, TILE * 2.2);
   }
 
   function drawPlayer() {
     ctx.save();
     ctx.translate(state.x, state.y);
-    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(0, TILE * 0.38, TILE * 0.36, TILE * 0.12, 0, 0, 7); ctx.fill();
+    var lift = hopLift();
+    ctx.fillStyle = 'rgba(0,0,0,' + (lift ? 0.1 : 0.18) + ')'; ctx.beginPath(); ctx.ellipse(0, TILE * 0.38, TILE * 0.36 * (1 - lift / TILE * 0.3), TILE * 0.12, 0, 0, 7); ctx.fill();
+    if (lift) { ctx.translate(0, -lift); emoji('☁️', 0, TILE * 0.42, TILE * 0.7); }
     if (state.powers.mighty) {
       ctx.fillStyle = 'rgba(250,204,21,' + (0.22 + 0.1 * Math.sin(clock * 3)) + ')';
       ctx.beginPath(); ctx.arc(Math.cos(state.facing) > 0.1 ? 8 : -8, -12, 9, 0, 7); ctx.fill();
@@ -2158,13 +2373,21 @@
     ctx.beginPath(); ctx.moveTo(-5.5, -0.5); ctx.lineTo(-1.5, 1); ctx.moveTo(5.5, -0.5); ctx.lineTo(1.5, 1); ctx.stroke();
     ctx.restore();
   }
+  function drawFrog(e) {
+    var hopUp = e.hop > 0 ? Math.sin((1 - e.hop / 0.35) * Math.PI) * 7 : 0, sq = 1 + e.squish * 0.3;
+    ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 9, 10, 3, 0, 0, 7); ctx.fill();
+    ctx.save(); ctx.translate(e.x, e.y - Math.max(0, hopUp)); ctx.scale(sq, 1 / sq);
+    if (e.flash > 0 || e.windup > 0) { ctx.fillStyle = e.flash > 0 ? 'rgba(255,255,255,.8)' : 'rgba(96,165,250,.45)'; ctx.beginPath(); ctx.arc(0, 0, 12, 0, 7); ctx.fill(); }
+    emoji('🐸', 0, 0, TILE * 0.8);
+    ctx.restore();
+  }
   function drawBat(e) {
     var flap = Math.sin(e.t * (e.dive > 0 ? 26 : 16));
     ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 14, 7, 2.5, 0, 0, 7); ctx.fill();
     ctx.save(); ctx.translate(e.x + (e.windup > 0 ? Math.sin(e.t * 60) * 1.5 : 0), e.y - 4);
     ctx.scale(1, 0.75 + 0.25 * Math.abs(flap));
     if (e.flash > 0 || e.windup > 0) { ctx.fillStyle = e.flash > 0 ? 'rgba(255,255,255,.8)' : 'rgba(251,113,133,.45)'; ctx.beginPath(); ctx.arc(0, 0, 11, 0, 7); ctx.fill(); }
-    emoji('🦇', 0, 0, TILE * 0.75);
+    emoji(e.kind === 'bee' ? '🐝' : '🦇', 0, 0, TILE * (e.kind === 'bee' ? 0.7 : 0.75));
     ctx.restore();
   }
   function drawCombat() {
@@ -2191,14 +2414,15 @@
     var drewPlayer = false;
     for (var i = 0; i < list.length; i++) {
       if (!drewPlayer && list[i].y > state.y) { drawPlayer(); drewPlayer = true; }
-      if (list[i].kind === 'mushroom') drawMushroom(list[i]); else if (list[i].kind === 'bat') drawBat(list[i]); else drawSlime(list[i]);
+      var k = list[i].kind;
+      if (k === 'mushroom') drawMushroom(list[i]); else if (k === 'bat' || k === 'bee') drawBat(list[i]); else if (k === 'frog') drawFrog(list[i]); else drawSlime(list[i]);
     }
     if (!drewPlayer) drawPlayer();
     drawSwirl();
     drawFliers();
     spores.forEach(function (p) {
-      ctx.fillStyle = 'rgba(190,242,100,.85)'; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fill();
-      ctx.strokeStyle = '#65a30d'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = p.water ? 'rgba(125,211,252,.9)' : 'rgba(190,242,100,.85)'; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 7); ctx.fill();
+      ctx.strokeStyle = p.water ? '#0284c7' : '#65a30d'; ctx.lineWidth = 1.5; ctx.stroke();
     });
     bolts.forEach(function (b) {
       var a = Math.atan2(b.vy, b.vx);
@@ -2290,7 +2514,7 @@
 
   function draw() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    ctx.fillStyle = map && map.cave ? '#1c1714' : '#2f9e44';
+    ctx.fillStyle = map && map.cave ? (map.theme === 'cloud' ? '#c7d2fe' : '#1c1714') : '#2f9e44';
     ctx.fillRect(0, 0, W, H);
     if (!map || state.mode === 'title' || state.mode === 'choose') return;
     // (welcome, intro, sleepy, reveal and play all draw the world)
@@ -2302,7 +2526,7 @@
     ctx.restore();
     var lightR = SPK.lightRadius(state, map);
     if (lightR) drawDark(lightR);
-    else if (map.cave) {
+    else if (map.cave && map.theme !== 'cloud') {
       var g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.7);
       g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
