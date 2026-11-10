@@ -970,3 +970,34 @@ test('travelTargets lists only lit fires that still exist', () => {
   g.campfires.push('meadow:F:0,0');
   assert.deepEqual([...SPK.travelTargets(g)], [SPK.HOME_FIRE, 'woods:F:6,17']);
 });
+
+// ── Hint trail is a toggle (Jeremy: tapping it again should hide it) ────
+test('the hint trail toggles on and off', () => {
+  const easy = SPK.DIFF.easy, normal = SPK.DIFF.normal;
+  const h = SPK.createHint(0);
+  assert.equal(SPK.hintVisible(h, normal, 100), false);
+  SPK.toggleHint(h, normal, 100);
+  assert.equal(SPK.hintVisible(h, normal, 100), true);
+  assert.equal(SPK.hintVisible(h, normal, 500), true, 'stays on until you turn it off');
+  SPK.toggleHint(h, normal, 500);
+  assert.equal(SPK.hintVisible(h, normal, 500), false, 'second tap hides it');
+});
+
+test('on easy the trail appears by itself, can be hidden, and comes back after the next discovery', () => {
+  const easy = SPK.DIFF.easy;
+  const h = SPK.createHint(0);
+  assert.equal(SPK.hintVisible(h, easy, 10), false);
+  assert.equal(SPK.hintVisible(h, easy, 50), true, 'after 45 s with nothing new');
+  SPK.toggleHint(h, easy, 50);
+  assert.equal(SPK.hintVisible(h, easy, 200), false, 'hidden stays hidden');
+  SPK.hintDiscovery(h, 300);
+  assert.equal(SPK.hintVisible(h, easy, 310), false);
+  assert.equal(SPK.hintVisible(h, easy, 350), true, 'back 45 s after the next find');
+});
+
+test('a trail you turned on stays on through discoveries', () => {
+  const h = SPK.createHint(0);
+  SPK.toggleHint(h, SPK.DIFF.normal, 10);
+  SPK.hintDiscovery(h, 20);
+  assert.equal(SPK.hintVisible(h, SPK.DIFF.normal, 30), true);
+});

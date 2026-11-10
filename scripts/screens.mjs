@@ -693,6 +693,80 @@ async function sparklehornPass(browser, vp) {
   check((await spk()).bolts > b, 'sparkle: tapping ✨ fires magic');
   await t.shot('21-sparkle-play');
 
+  // Slice 2: walk into the east rock (it bonks open) and on into the woods
+  await page.evaluate(() => {
+    const s = window.__spk;
+    s._give('mighty'); s.state.campfires.push('meadow:F:12,18');
+    s._clearEnemies(); s._teleport('meadow', 43, 14);
+  });
+  await page.waitForTimeout(300);
+  const toScreen = (tx, ty) => page.evaluate(([x, y]) => {
+    const v = window.__spk.view();
+    return { x: innerWidth / 2 + ((x + 0.5) * 32 - v.camX) * v.scale, y: innerHeight / 2 + ((y + 0.5) * 32 - v.camY) * v.scale };
+  }, [tx, ty]);
+  if (vp.mobile) {
+    const ex = await toScreen(47, 14);
+    await tap(ex.x, ex.y); // Alana's way: tap where you want to go
+  } else await page.keyboard.down('ArrowRight');
+  await page.waitForFunction(() => window.__spk.state.map === 'woods', null, { timeout: 5000 }).catch(() => {});
+  if (!vp.mobile) await page.keyboard.up('ArrowRight');
+  await page.waitForTimeout(500);
+  let w = await spk();
+  check(w.map === 'woods' && w.mode === 'play', `sparkle: walking into the east rock bonks it open and leads to the woods (${w.map})`);
+  await page.evaluate(() => window.__spk._clearEnemies());
+  await t.shot('23-sparkle-woods');
+
+  // The map screen: open with 🗺️, travel home by tapping a lit campfire
+  const LM = await layout();
+  await tap(LM.map.x, LM.map.y);
+  await page.waitForTimeout(300);
+  check((await spk()).mode === 'mapview', 'sparkle: 🗺️ opens the map screen');
+  await t.shot('24-sparkle-map');
+  let hits = await page.evaluate(() => window.__spk.mapHits());
+  const meadowTab = hits.find((h) => h.act === 'tab' && h.id === 'meadow');
+  if (meadowTab) { await tap(meadowTab.x, meadowTab.y); await page.waitForTimeout(200); }
+  hits = await page.evaluate(() => window.__spk.mapHits());
+  const fire = hits.find((h) => h.act === 'travel' && h.id === 'meadow:F:12,18');
+  check(!!fire, 'sparkle: the map shows the lit home campfire as a place to travel');
+  if (fire) { await tap(fire.x, fire.y); await page.waitForTimeout(900); }
+  w = await spk();
+  check(w.map === 'meadow' && w.mode === 'play' && w.inputs.active === 0, `sparkle: tapping the campfire travels home (${w.map}, ${w.mode}, ${w.inputs.active} held)`);
+  // ✖ closes the map and walking still works
+  await quiet();
+  await tap(LM.map.x, LM.map.y);
+  await page.waitForTimeout(300);
+  const close = (await page.evaluate(() => window.__spk.mapHits())).find((h) => h.act === 'close');
+  await tap(close.x, close.y);
+  await page.waitForTimeout(200);
+  w = await spk();
+  if (vp.mobile) await tap(vp.width / 2 + 100, vp.height / 2);
+  else { await page.keyboard.down('ArrowRight'); await page.waitForTimeout(400); await page.keyboard.up('ArrowRight'); }
+  await page.waitForTimeout(600);
+  const w2 = await spk();
+  check(w.mode === 'play' && w2.x > w.x + 10, `sparkle: ✖ closes the map and walking works after (${w.mode}, moved ${Math.round(w2.x - w.x)})`);
+
+  // ✨ on the map turns the hint trail on, and a second tap turns it off
+  const hintTap = async () => {
+    await tap(LM.map.x, LM.map.y); await page.waitForTimeout(300);
+    const h = (await page.evaluate(() => window.__spk.mapHits())).find((x) => x.act === 'trail');
+    await tap(h.x, h.y); await page.waitForTimeout(200);
+    return page.evaluate(() => [window.__spk.hint, window.__spk.state.mode]);
+  };
+  const on = await hintTap();
+  const off = await hintTap();
+  check(on[0] === true && off[0] === false && off[1] === 'play', `sparkle: ✨ on the map toggles the hint trail on and off (${on[0]} -> ${off[0]})`);
+
+  // Dark caves draw without errors
+  for (const [cave, tx, ty] of [['grotto', 4, 13], ['bubble', 28, 11]]) {
+    const f0 = await spk();
+    await page.evaluate(([c, x, y]) => window.__spk._teleport(c, x, y), [cave, tx, ty]);
+    await page.waitForTimeout(1200); // desktop WebKit software-renders 2880x1800 at ~10 fps
+    const f1 = await spk();
+    check(f1.map === cave && f1.frames > f0.frames + 5 && f1.errors === f0.errors, `sparkle: the ${cave} draws with no errors (${f1.frames - f0.frames} frames)`);
+  }
+  await t.shot('25-sparkle-dark-cave');
+  await quiet();
+
   // 7. Rotation mid-play (phones and iPads)
   if (vp.mobile) {
     await page.setViewportSize({ width: vp.height, height: vp.width });

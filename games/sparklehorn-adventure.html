@@ -652,6 +652,18 @@
   };
   SPK.critterHint = function (state) { return HINTS[SPK.stage(state).key]; };
 
+  // ── Hint trail: a toggle. On Easy it also appears by itself when you've
+  // found nothing new for a while; turning it off hides that until the next find.
+  SPK.createHint = function (clock) { return { on: false, hidden: false, last: clock }; };
+  SPK.hintVisible = function (h, diff, clock) {
+    return h.on || (!h.hidden && diff.hintAfter != null && clock - h.last > diff.hintAfter);
+  };
+  SPK.toggleHint = function (h, diff, clock) {
+    if (SPK.hintVisible(h, diff, clock)) { h.on = false; h.hidden = true; } else { h.on = true; h.hidden = false; }
+    return h.on;
+  };
+  SPK.hintDiscovery = function (h, clock) { h.last = clock; h.hidden = false; };
+
   // ── Map screen ───────────────────────────────────────────────────────
   SPK.MAP_ICON = { meadow: '🌼', woods: '🍄', pebble: '🪨', grotto: '💡', bubble: '🫧' };
   // What the map screen shows for one map: only things on tiles you've seen.
@@ -949,6 +961,7 @@
   function startGame(difficulty) {
     if (state.mode !== 'choose') return;
     state = SPK.createGame(difficulty);
+    hint = SPK.createHint(clock);
     map = null;
     introLeft = 10;
     show('diff', false);
@@ -1319,8 +1332,8 @@
     var id = boulderIdFrom(hits);
     if (id && state.powers.mighty) breakBoulder(id);
   }
-  var lastDiscovery = 0, trailUntil = 0, fliers = [], floaters = [];
-  function onDiscovery() { lastDiscovery = clock; trailUntil = 0; }
+  var hint = SPK.createHint(0), fliers = [], floaters = [];
+  function onDiscovery() { SPK.hintDiscovery(hint, clock); }
   function flyGem(x, y, delay) { fliers.push({ x: x, y: y, t: -delay, vx: (Math.random() - 0.5) * 120, vy: -140 - Math.random() * 60 }); }
   function heartPieceFx(x, y) {
     burst(x, y, 24, ['#f43f5e', '#f9a8d4', '#ffffff'], 120);
@@ -1431,7 +1444,7 @@
     places.forEach(function (id, i) { mapButton(tx + i * (tr * 2 + gap), T + 26, tr, SPK.MAP_ICON[id], 'tab', id, id === mapUI.mapId && mapUI.page === 'map'); });
     // ✨ show me the way, 📖 friends — a column on the right
     var colX = R - 30;
-    mapButton(colX, (T + B) / 2 - 40, 30, '✨', 'trail');
+    mapButton(colX, (T + B) / 2 - 40, 30, '✨', 'trail', null, trailOn()); // lit while the trail is on
     mapButton(colX, (T + B) / 2 + 40, 30, '📖', 'book', null, mapUI.page === 'book');
     var aL = L, aT = T + 62, aR = R - 74, aB = B;
     if (mapUI.page === 'book') { drawFriendsBook(aL, aT, aR, aB); return; }
@@ -1487,7 +1500,7 @@
       if (h.act === 'close') { closeMap(); sfx('pop'); }
       else if (h.act === 'tab') { mapUI.mapId = h.id; mapUI.page = 'map'; sfx('sparkle'); }
       else if (h.act === 'book') { mapUI.page = mapUI.page === 'book' ? 'map' : 'book'; sfx('sparkle'); }
-      else if (h.act === 'trail') { closeMap(); trailUntil = clock + 8; sfx('sparkle'); }
+      else if (h.act === 'trail') { var on = SPK.toggleHint(hint, SPK.DIFF[state.difficulty], clock); closeMap(); sfx(on ? 'sparkle' : 'pop'); }
       else if (h.act === 'travel') {
         var at = SPK.besideFire(h.id);
         closeMap();
@@ -1641,11 +1654,7 @@
   }
 
   // ── Hint trail: sparkles pointing toward the next big thing ──────────
-  function trailOn() {
-    var d = SPK.DIFF[state.difficulty];
-    if (clock < trailUntil) return true;
-    return d.hintAfter != null && clock - lastDiscovery > d.hintAfter;
-  }
+  function trailOn() { return SPK.hintVisible(hint, SPK.DIFF[state.difficulty], clock); }
   function drawTrail() {
     if (!trailOn()) return;
     var goal = SPK.nextGoal(state);
@@ -1842,10 +1851,12 @@
     if (v.x || v.y) {
       var sp = SPEED * SPK.speedMul(state, now());
       var res = SPK.moveAndSlide(map, { x: state.x, y: state.y, r: BODY_R }, v.x * sp * dt, v.y * sp * dt, collideCtx());
-      if (walkTo && res.hit.length && Math.hypot(res.x - state.x, res.y - state.y) < 0.5) walkTo = null;
+      var bid = boulderIdFrom(res.hit);
+      // A tap-walk stops at a wall, but keeps pushing a cracked rock you can
+      // bonk, so tap-to-walk players (Alana) open rocks just by tapping past them.
+      if (walkTo && res.hit.length && Math.hypot(res.x - state.x, res.y - state.y) < 0.5 && !(bid && state.powers.mighty)) walkTo = null;
       state.x = res.x; state.y = res.y;
       state.facing = Math.atan2(v.y, v.x);
-      var bid = boulderIdFrom(res.hit);
       if (bid && state.powers.mighty && Math.random() < 0.3) burst(state.x + Math.cos(state.facing) * TILE * 0.5, state.y + Math.sin(state.facing) * TILE * 0.5, 1, ['#9ca3af', '#d1d5db'], 30);
       if (SPK.bonkTick(state, bid, dt)) breakBoulder(bid);
     } else SPK.bonkTick(state, null, dt);
@@ -2237,22 +2248,30 @@
 
   // Dark caves: one reusable mask canvas, with soft holes cut for the
   // unicorn, lit campfires and glowshrooms.
-  var darkCv = null;
+  var darkCv = null, lightSprite = null;
   function drawDark(rTiles) {
-    if (!darkCv) { darkCv = document.createElement('canvas'); darkCv.width = canvas.width; darkCv.height = canvas.height; }
+    // The darkness is all soft gradients, so a quarter-size mask scaled up
+    // looks the same and costs far less on slow devices.
+    var MASK = 0.25;
+    if (!darkCv) { darkCv = document.createElement('canvas'); darkCv.width = Math.ceil(W * MASK); darkCv.height = Math.ceil(H * MASK); }
     var dc = darkCv.getContext('2d');
-    dc.setTransform(DPR, 0, 0, DPR, 0, 0);
+    dc.setTransform(MASK, 0, 0, MASK, 0, 0);
     dc.globalCompositeOperation = 'source-over';
     dc.clearRect(0, 0, W, H);
     dc.fillStyle = map.dark === 'dark' ? 'rgba(4,3,14,.96)' : 'rgba(10,6,26,.88)';
     dc.fillRect(0, 0, W, H);
     dc.globalCompositeOperation = 'destination-out';
+    if (!lightSprite) {
+      lightSprite = document.createElement('canvas'); lightSprite.width = lightSprite.height = 64;
+      var lc = lightSprite.getContext('2d'), gr = lc.createRadialGradient(32, 32, 32 * 0.35, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      lc.fillStyle = gr; lc.fillRect(0, 0, 64, 64);
+    }
     function hole(wx, wy, r, a) {
       var sx = W / 2 + (wx - cam.x) * scale, sy = H / 2 + (wy - cam.y) * scale, rr = r * scale;
       if (sx < -rr || sy < -rr || sx > W + rr || sy > H + rr) return;
-      var gr = dc.createRadialGradient(sx, sy, rr * 0.35, sx, sy, rr);
-      gr.addColorStop(0, 'rgba(0,0,0,' + a + ')'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-      dc.fillStyle = gr; dc.beginPath(); dc.arc(sx, sy, rr, 0, 7); dc.fill();
+      dc.globalAlpha = a;
+      dc.drawImage(lightSprite, sx - rr, sy - rr, rr * 2, rr * 2);
     }
     hole(state.x, state.y, rTiles * TILE * (1 + Math.sin(clock * 2) * 0.02), 1);
     for (var i = 0; i < fires.length; i++) if (fires[i].lit()) hole(fires[i].x, fires[i].y, 3.4 * TILE, 1);
@@ -2262,6 +2281,7 @@
     for (var ty = ty0; ty <= ty1; ty++) for (var tx = tx0; tx <= tx1; tx++) {
       if (SPK.tileAt(map, tx, ty) === 'g') hole((tx + 0.5) * TILE, (ty + 0.5) * TILE, 1.4 * TILE, 0.55);
     }
+    dc.globalAlpha = 1;
     ctx.drawImage(darkCv, 0, 0, W, H);
   }
 
@@ -2325,6 +2345,7 @@
     mapHits: function () { return mapUI ? mapUI.hits.map(function (h) { return { x: h.x, y: h.y, r: h.r, act: h.act, id: h.id || null }; }) : []; },
     _give: function (kind) { if (SPK.POWERUPS[kind]) SPK.grantPowerup(state, kind, now()); else state.powers[kind] = true; },
     get enemies() { return enemies.length; },
+    get hint() { return trailOn(); },
   };
 
   // ── Saves (through the arcade) ───────────────────────────────────────
