@@ -89,13 +89,13 @@
       'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
       'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
       'T...............,.#############.....,....,....TT',
-      'TT.H..............#############..,.............T',
+      'TT.H..............#############..,............*T',
       'TT.........,..TT..#############,.,..........C.TT',
       'TT...,TT.,.,,.......####D####.....TT.....,....TT',
       'TT,...T......,......,...:.,........T...........T',
       'TT......................:,.............,.TT...TT',
       'T..,....C...............:.........S............T',
-      'T.......................:.,...............,...TT',
+      'T.*.....................:.,...............,...TT',
       'T.....M,................:T...........,F...,...TT',
       'T...........:::::::::::::.....,....,..........TT',
       'TT..........:.......C.........M...,...,...S...TT',
@@ -548,6 +548,26 @@
     'bubble:C:5,17':  { powerup: 'swirl' },
     'bubble:C:25,18': { gems: 9 },
     'bubble:C:15,11': { gems: 20 },             // on the island
+  };
+
+  // ── Star Friends ─────────────────────────────────────────────────────
+  SPK.FRIENDS = {
+    'meadow:*:2,9':   { emoji: '🐞', name: 'Ladybug' },
+    'meadow:*:46,3':  { emoji: '🦋', name: 'Butterfly' },
+    'woods:*:3,3':    { emoji: '🦉', name: 'Owl' },
+    'woods:*:52,32':  { emoji: '🦔', name: 'Hedgehog' },
+    'woods:*:36,9':   { emoji: '🐿️', name: 'Squirrel' },
+    'grotto:*:4,21':  { emoji: '🐌', name: 'Snail' },
+    'bubble:*:15,13': { emoji: '🐢', name: 'Turtle' },
+  };
+  SPK.meetFriend = function (state, id) {
+    var f = SPK.FRIENDS[id];
+    if (!f || state.friends.indexOf(id) >= 0) return null;
+    state.friends.push(id);
+    return f;
+  };
+  SPK.friendsBook = function (state) {
+    return Object.keys(SPK.FRIENDS).map(function (id) { return { id: id, emoji: SPK.FRIENDS[id].emoji, found: state.friends.indexOf(id) >= 0 }; });
   };
 
   SPK.collectHeartPiece = function (state, id) {
@@ -1287,7 +1307,7 @@
   function touchThings() {
     for (var i = 0; i < map.entities.length; i++) {
       var e = map.entities[i];
-      if (e.kind !== 'F' && e.kind !== 'P' && e.kind !== 'C' && e.kind !== 'H') continue;
+      if (e.kind !== 'F' && e.kind !== 'P' && e.kind !== 'C' && e.kind !== 'H' && e.kind !== '*') continue;
       var x = (e.tx + 0.5) * TILE, y = (e.ty + 0.5) * TILE;
       if (Math.hypot(x - state.x, y - state.y) > TILE * 0.95) continue;
       if (e.kind === 'C') {
@@ -1299,6 +1319,9 @@
         if (c.powerup) dropPickup(c.powerup, x, y);
         if (c.heartPiece) heartPieceFx(x, y);
         if (c.upgrade === 'bigSparkle') showReveal({ item: '✨', picture: ['🦄', '✨', '➡️', '💥'], text: 'Big Sparkle! Bigger, stronger magic!' });
+      } else if (e.kind === '*') {
+        var fr = SPK.meetFriend(state, e.id);
+        if (fr) { showReveal({ item: fr.emoji, picture: ['🦄', '❤️', fr.emoji, '🏠'], text: fr.name + ' is your friend!' }); onDiscovery(); }
       } else if (e.kind === 'H') {
         if (SPK.collectHeartPiece(state, e.id)) { heartPieceFx(x, y); onDiscovery(); }
       } else if (e.kind === 'F') {
@@ -1842,11 +1865,23 @@
     }
     drawEntities(tx0, ty0, tx1, ty1);
     drawTrail();
+    drawFriendsAtHome();
     SPK.CRITTERS.forEach(function (c) {
       if (c.map === map.id) emoji(c.emoji, (c.tx + 0.5) * TILE, (c.ty + 0.5) * TILE - Math.abs(Math.sin(clock * 3 + c.tx)) * 4, TILE * 0.8);
     });
   }
 
+  // Friends you've found hang out around the home campfire.
+  function drawFriendsAtHome() {
+    var home = SPK.entity(SPK.HOME_FIRE);
+    if (map.id !== SPK.HOME_FIRE.split(':')[0] || !state.friends.length) return;
+    var hx = (home.tx + 0.5) * TILE, hy = (home.ty + 0.5) * TILE;
+    state.friends.forEach(function (id, i) {
+      var f = SPK.FRIENDS[id]; if (!f) return;
+      var a = i * 2.4 + Math.sin(clock * 0.3 + i) * 0.6, r = TILE * (1.7 + (i % 3) * 0.45);
+      emoji(f.emoji, hx + Math.cos(a) * r, hy + Math.sin(a) * r * 0.7 - Math.abs(Math.sin(clock * 3 + i)) * 3, TILE * 0.55);
+    });
+  }
   function emoji(ch, x, y, size) {
     ctx.font = Math.round(size) + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#000';
@@ -1882,6 +1917,14 @@
         if (pd && !state.powers[pd.power]) {
           ctx.fillStyle = 'rgba(250,204,21,' + (0.35 + 0.25 * Math.sin(clock * 4)) + ')'; ctx.beginPath(); ctx.arc(x, y - 10, 14, 0, 7); ctx.fill();
           emoji(pd.item, x, y - 10 + Math.sin(clock * 3) * 2, TILE * 0.55);
+        }
+      } else if (e.kind === '*') {
+        var fd = SPK.FRIENDS[e.id];
+        if (fd && state.friends.indexOf(e.id) < 0) {
+          var tw = 0.5 + 0.5 * Math.sin(clock * 2.5 + e.tx);
+          ctx.fillStyle = 'rgba(253,230,138,' + (0.25 + 0.25 * tw) + ')'; ctx.beginPath(); ctx.arc(x, y, 14, 0, 7); ctx.fill();
+          emoji(fd.emoji, x, y - Math.abs(Math.sin(clock * 2 + e.ty)) * 3, TILE * 0.62);
+          ctx.fillStyle = '#fff'; ctx.fillRect(x + 9, y - 14 - tw * 3, 2, 6); ctx.fillRect(x + 7, y - 12 - tw * 3, 6, 2);
         }
       } else if (e.kind === 'L') {
         emoji('🍄', x, y - TILE * 0.55, TILE * 2.2);

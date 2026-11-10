@@ -898,3 +898,44 @@ test('big sparkle is a chest upgrade that makes bolts do 2', () => {
   assert.equal(g.powers.bigSparkle, true);
   assert.equal(SPK.boltDamage(g), 2);
 });
+
+// ── Slice 2, Task 5: Star Friends ───────────────────────────────────────
+test('every star friend spot has a friend, and every friend has a spot', () => {
+  const spots = [];
+  for (const id of REAL_MAPS) for (const e of SPK.parseMap(id).entities) if (e.kind === '*') spots.push(e.id);
+  assert.equal(spots.length, 7);
+  for (const id of spots) assert.ok(SPK.FRIENDS[id] && SPK.FRIENDS[id].emoji && SPK.FRIENDS[id].name, `${id} has a friend`);
+  for (const id of Object.keys(SPK.FRIENDS)) assert.ok(spots.includes(id), `${id} is on a map`);
+  const meadow = SPK.parseMap('meadow');
+  const start = meadow.entities.find((e) => e.kind === '@');
+  const r = flood(meadow, start.tx, start.ty, false);
+  for (const e of meadow.entities.filter((e) => e.kind === '*')) assert.ok(r(e), `${e.id} reachable from the start`);
+});
+
+test('meeting a friend happens once', () => {
+  const g = SPK.createGame('easy');
+  const id = Object.keys(SPK.FRIENDS)[0];
+  const f = SPK.meetFriend(g, id);
+  assert.ok(f && f.emoji);
+  assert.equal(SPK.meetFriend(g, id), null);
+  assert.equal(SPK.meetFriend(g, 'meadow:*:0,0'), null, 'not a friend');
+  assert.equal(g.friends.length, 1);
+});
+
+test('the friends book lists every friend in a fixed order with found flags', () => {
+  const g = SPK.createGame('easy');
+  const ids = Object.keys(SPK.FRIENDS);
+  SPK.meetFriend(g, ids[2]);
+  const book = SPK.friendsBook(g);
+  assert.equal(book.length, 7);
+  assert.deepEqual(book.map((b) => b.found), [false, false, true, false, false, false, false]);
+  assert.equal(book[2].emoji, SPK.FRIENDS[ids[2]].emoji);
+});
+
+test('friends survive a save', () => {
+  const g = SPK.createGame('easy');
+  SPK.meetFriend(g, 'woods:*:3,3');
+  g.mode = 'play';
+  const back = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g)))));
+  assert.deepEqual([...back.friends], ['woods:*:3,3']);
+});
