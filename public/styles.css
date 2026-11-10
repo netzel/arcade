@@ -313,6 +313,36 @@ button { font: inherit; color: inherit; }
   .screen-center { gap: 16px; }
   .player-btn { width: clamp(120px, 26vh, 180px); }
 }
+/* Phones (either way up): compact row cards so every game fits on one screen.
+   Picture on the left (still a big tap target that plays), title and buttons on the right. */
+@media (max-width: 600px), (max-height: 520px) {
+  .greeting { margin: -8px 0 12px; font-size: 18px; }
+  .topbar { margin-bottom: 14px; }
+  .brand-name { font-size: 22px; }
+  .game-grid {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  }
+  .game-card, .soon-card { max-width: none; }
+  .game-card { flex-direction: row; border-radius: 20px; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3); }
+  .game-art { aspect-ratio: auto; width: 76px; min-height: 76px; flex-shrink: 0; }
+  .game-art .art-emoji { font-size: 42px; }
+  .game-art .art-badge, .game-art .art-play { display: none; }
+  .game-body { padding: 10px; gap: 0; min-width: 0; justify-content: center; }
+  .game-title { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .game-tagline { display: none; }
+  .game-actions { gap: 5px; margin-top: 0; padding-top: 6px; }
+  .game-actions .btn { min-height: 42px; padding: 4px 6px; font-size: 14px; gap: 5px; border-radius: 14px; flex: 0 1 auto; }
+  .game-actions .btn-primary { flex-grow: 1; }
+  .soon-card { min-height: 88px; padding: 12px; flex-direction: row; }
+  .soon-card .soon-emoji { font-size: 36px; }
+  .soon-card .soon-text { display: none; }
+}
+/* Phones in landscape: drop the greeting so two columns of cards fit under the header. */
+@media (max-height: 520px) {
+  .greeting { display: none; }
+  .topbar { margin-bottom: 8px; }
+}
 /* Very small phones */
 @media (max-width: 360px) {
   .brand-icon { display: none; }
