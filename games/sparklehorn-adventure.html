@@ -971,7 +971,8 @@
     var before = state.hpMax;
     state.difficulty = d;
     state.hpMax = SPK.hpMaxFor(state);
-    state.hp = Math.max(1, Math.min(state.hpMax, state.hp + Math.max(0, state.hpMax - before)));
+    // Keep the same share of hearts full, so switching back and forth never heals.
+    state.hp = Math.max(1, Math.min(state.hpMax, Math.round(state.hp * state.hpMax / before)));
   };
 
   // The horn is the close-up, high-risk attack, so it hits much harder than a bolt.
@@ -1696,6 +1697,13 @@
     var colX = R - 30;
     closetButton(colX, (T + B) / 2 - 40, 30, '🐣', 'diff', 'easy', state.difficulty === 'easy');
     closetButton(colX, (T + B) / 2 + 40, 30, '🦄', 'diff', 'normal', state.difficulty === 'normal');
+    // Switching needs a second, different tap (✔️), so a stray tap never changes how hard it is.
+    var cf = closetUI.confirm;
+    if (cf && t - cf.t < 4000) {
+      var cy2 = (T + B) / 2 + (cf.id === 'easy' ? -40 : 40), pr = 26 + 3 * Math.sin(t / 160);
+      ctx.fillStyle = 'rgba(253,224,71,.35)'; ctx.beginPath(); ctx.arc(colX - 74, cy2, pr + 8, 0, 7); ctx.fill();
+      closetButton(colX - 74, cy2, 26, '✔️', 'diffok', cf.id);
+    } else closetUI.confirm = null;
     // two rows: colors, then accessories; each cell shows you wearing it
     var aL = L, aT = T + 62, aR = R - 74, aB = B;
     var rows = [['plain', 'mint', 'galaxy', 'rainbow'], ['bare', 'crown', 'cape', 'horn']];
@@ -1744,7 +1752,8 @@
       var h = closetUI.hits[i];
       if (Math.hypot(x - h.x, y - h.y) > h.r + 8) continue;
       if (h.act === 'close') { closeCloset(); sfx('pop'); }
-      else if (h.act === 'diff') { if (state.difficulty !== h.id) { SPK.setDifficulty(state, h.id); sfx('power'); } }
+      else if (h.act === 'diff') { closetUI.confirm = state.difficulty !== h.id ? { id: h.id, t: now() } : null; sfx('sparkle'); }
+      else if (h.act === 'diffok') { SPK.setDifficulty(state, h.id); closetUI.confirm = null; sfx('power'); }
       else if (h.act === 'item') {
         var r;
         if (h.id === 'plain' || h.id === 'bare') { var k = h.id === 'plain' ? 'color' : 'accessory'; r = state.closet.wearing[k] ? 'off' : null; state.closet.wearing[k] = null; }

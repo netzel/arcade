@@ -1228,10 +1228,12 @@ test('switching difficulty in the closet keeps hearts sensible', () => {
   SPK.setDifficulty(g, 'easy');
   assert.equal(g.difficulty, 'easy');
   assert.equal(g.hpMax, 12);
-  assert.equal(g.hp, 9, 'the extra hearts arrive full');
+  assert.equal(g.hp, 8, 'the same share of your hearts stays full (5/8 of 12, rounded)');
   SPK.setDifficulty(g, 'normal');
   assert.equal(g.hpMax, 8);
-  assert.equal(g.hp, 8, 'never above the max');
+  assert.equal(g.hp, 5, 'switching back and forth is not a free heal');
+  g.hp = 1; SPK.setDifficulty(g, 'easy'); SPK.setDifficulty(g, 'normal'); SPK.setDifficulty(g, 'easy'); SPK.setDifficulty(g, 'normal');
+  assert.ok(g.hp <= 2, `round trips never heal (${g.hp})`);
   g.hp = 1; SPK.setDifficulty(g, 'normal');
   assert.ok(g.hp >= 1);
   assert.throws(() => SPK.setDifficulty(g, 'hard'));
