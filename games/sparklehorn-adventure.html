@@ -652,6 +652,28 @@
   };
   SPK.critterHint = function (state) { return HINTS[SPK.stage(state).key]; };
 
+  // ── Map screen ───────────────────────────────────────────────────────
+  SPK.MAP_ICON = { meadow: '🌼', woods: '🍄', pebble: '🪨', grotto: '💡', bubble: '🫧' };
+  // What the map screen shows for one map: only things on tiles you've seen.
+  SPK.mapMarks = function (state, mapId) {
+    var ex = state.explored[mapId], out = [];
+    if (!ex) return out;
+    var m = SPK.parseMap(mapId);
+    m.entities.forEach(function (e) {
+      if (!ex[e.ty * m.w + e.tx]) return;
+      var k = e.kind;
+      if (k === 'F') out.push({ kind: 'fire', id: e.id, tx: e.tx, ty: e.ty, lit: state.campfires.indexOf(e.id) >= 0 });
+      else if (SPK.EXITS[k]) out.push({ kind: 'door', id: e.id, tx: e.tx, ty: e.ty, to: SPK.DOORS[e.id] ? SPK.DOORS[e.id].to : null });
+      else if (k === 'C' && state.chests.indexOf(e.id) < 0) out.push({ kind: 'chest', id: e.id, tx: e.tx, ty: e.ty });
+      else if (k === '*' && SPK.FRIENDS[e.id] && state.friends.indexOf(e.id) < 0) out.push({ kind: 'friend', id: e.id, tx: e.tx, ty: e.ty });
+    });
+    return out;
+  };
+  // Lit campfires you can jump to from the map screen.
+  SPK.travelTargets = function (state) {
+    return state.campfires.filter(function (id) { return knownEntity(id, 'F'); });
+  };
+
   // ── Saves ────────────────────────────────────────────────────────────
   SPK.encodeBits = function (bits) {
     var bytes = new Uint8Array(Math.ceil(bits.length / 8)), s = '';
@@ -944,6 +966,7 @@
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     if (state.mode === 'intro') { state.mode = 'play'; introLeft = 0; return; }
     if (state.mode === 'reveal') { if (revealT > 1) { state.mode = 'play'; resetInput('reveal'); } return; }
+    if (state.mode === 'mapview') { mapTap(e.clientX, e.clientY); return; }
     if (speaker && Math.hypot(e.clientX - speaker.x, e.clientY - speaker.y) <= speaker.r + 8) { say(speaker.text); return; }
     input.down(e.pointerId, e.clientX, e.clientY, now(), e.pointerType);
   });
@@ -957,17 +980,21 @@
   canvas.addEventListener('pointercancel', function (e) { input.cancel(e.pointerId); });
   canvas.addEventListener('lostpointercapture', function (e) { input.cancel(e.pointerId); });
   canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-  window.addEventListener('blur', function () { resetInput('blur'); });
+  window.addEventListener('blur', function () { closeMap(); resetInput('blur'); });
   window.addEventListener('pagehide', function () { resetInput('pagehide'); });
   document.addEventListener('visibilitychange', function () { if (document.hidden) resetInput('hidden'); });
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', function () { setTimeout(resize, 150); });
-  if (window.ArcadeBridge && ArcadeBridge.on) ArcadeBridge.on(function (type) { if (type === 'pause') resetInput('pause'); });
+  if (window.ArcadeBridge && ArcadeBridge.on) ArcadeBridge.on(function (type) { if (type === 'pause') { closeMap(); resetInput('pause'); } });
 
   // ── Keyboard ─────────────────────────────────────────────────────────
   var KEYMAP = { ArrowLeft: 'l', a: 'l', A: 'l', ArrowRight: 'r', d: 'r', D: 'r', ArrowUp: 'u', w: 'u', W: 'u', ArrowDown: 'dn', s: 'dn', S: 'dn' };
   var PRESSKEYS = { ' ': 'horn', j: 'horn', J: 'horn', k: 'magic', K: 'magic', f: 'magic', F: 'magic', m: 'map', M: 'map' };
   window.addEventListener('keydown', function (e) {
+    if (state.mode === 'mapview') {
+      if (e.key === 'Escape' || PRESSKEYS[e.key] === 'map') { e.preventDefault(); closeMap(); }
+      return;
+    }
     if (KEYMAP[e.key]) { keys[KEYMAP[e.key]] = true; e.preventDefault(); return; }
     var name = PRESSKEYS[e.key];
     if (!name) return;
@@ -1342,6 +1369,136 @@
     burst(state.x, state.y, 40, ['#fde047', '#f9a8d4', '#a5f3fc', '#ffffff'], 160);
   }
 
+  // ── Map screen: where you've been, campfire travel, the Friends Book ─
+  // Everything is drawn on the canvas; taps hit-test against mapUI.hits.
+  var mapUI = null;
+  var MINI = { '.': '#86d47a', ',': '#a7e08f', ':': '#ecd9a8', '>': '#ecd9a8', T: '#2f7d3f', '~': '#5aa9f5', '#': '#8a8480', B: '#9ca3af',
+               D: '#1c1917', U: '#fde68a', '=': '#8f7c68', g: '#7dd3c0', L: '#ef4444' };
+  function openMap() {
+    mapUI = { mapId: map.id, page: 'map', hits: [], openedAt: now(), mini: null };
+    state.mode = 'mapview';
+    resetInput('map');
+    sfx('chime');
+  }
+  function closeMap() {
+    if (!mapUI || state.mode !== 'mapview') return;
+    // Power-up timers pause while you look at the map.
+    var shift = now() - mapUI.openedAt;
+    for (var k in SPK.POWERUPS) if (state.fx[k]) state.fx[k].until += shift;
+    if (state.fx.invulnUntil) state.fx.invulnUntil += shift;
+    mapUI = null;
+    state.mode = 'play';
+    resetInput('map');
+  }
+  function miniFor(mapId) {
+    var m = SPK.parseMap(mapId), ex = state.explored[mapId], cv = document.createElement('canvas');
+    cv.width = m.w; cv.height = m.h;
+    var c = cv.getContext('2d');
+    for (var y = 0; y < m.h; y++) for (var x = 0; x < m.w; x++) {
+      if (!ex || !ex[y * m.w + x]) continue;
+      var ch = SPK.tileAt(m, x, y);
+      if (ch === 'B' && state.broken.indexOf(mapId + ':B:' + x + ',' + y) >= 0) ch = m.floor;
+      c.fillStyle = MINI[ch] || (m.cave ? MINI['='] : MINI['.']);
+      if (m.cave && ch === '#') c.fillStyle = '#3d3530';
+      c.fillRect(x, y, 1, 1);
+    }
+    return cv;
+  }
+  function placesVisited() {
+    return Object.keys(SPK.MAP_ICON).filter(function (id) {
+      var ex = state.explored[id];
+      if (!ex) return false;
+      for (var i = 0; i < ex.length; i++) if (ex[i]) return true;
+      return false;
+    });
+  }
+  function mapButton(x, y, r, icon, act, id, on) {
+    ctx.fillStyle = on ? '#fde68a' : 'rgba(255,255,255,.9)';
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#6d28d9'; ctx.stroke();
+    emoji(icon, x, y + 1, r * 1.05);
+    mapUI.hits.push({ x: x, y: y, r: r, act: act, id: id });
+  }
+  function drawMapView() {
+    var ins = insets(), L = ins.l + 16, T = ins.t + 12, R = W - ins.r - 16, B = H - ins.b - 16;
+    mapUI.hits = [];
+    ctx.fillStyle = 'rgba(30,12,64,.82)'; ctx.fillRect(0, 0, W, H);
+    // ✖ top-left (far from the arcade's ⏸ and from where 🗺️ was)
+    mapButton(L + 24, T + 26, 24, '✖️', 'close');
+    // places you've been
+    var places = placesVisited(), tr = 22, gap = 10;
+    var tx = (L + R) / 2 - (places.length * (tr * 2 + gap) - gap) / 2 + tr;
+    places.forEach(function (id, i) { mapButton(tx + i * (tr * 2 + gap), T + 26, tr, SPK.MAP_ICON[id], 'tab', id, id === mapUI.mapId && mapUI.page === 'map'); });
+    // ✨ show me the way, 📖 friends — a column on the right
+    var colX = R - 30;
+    mapButton(colX, (T + B) / 2 - 40, 30, '✨', 'trail');
+    mapButton(colX, (T + B) / 2 + 40, 30, '📖', 'book', null, mapUI.page === 'book');
+    var aL = L, aT = T + 62, aR = R - 74, aB = B;
+    if (mapUI.page === 'book') { drawFriendsBook(aL, aT, aR, aB); return; }
+    var m = SPK.parseMap(mapUI.mapId);
+    if (!mapUI.mini || mapUI.miniId !== m.id) { mapUI.mini = miniFor(m.id); mapUI.miniId = m.id; }
+    var cell = Math.min((aR - aL) / m.w, (aB - aT) / m.h);
+    var mw = m.w * cell, mh = m.h * cell, ox = (aL + aR) / 2 - mw / 2, oy = (aT + aB) / 2 - mh / 2;
+    ctx.fillStyle = 'rgba(15,6,35,.85)'; roundRect(ox - 6, oy - 6, mw + 12, mh + 12, 12); ctx.fill();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(mapUI.mini, ox, oy, mw, mh);
+    ctx.imageSmoothingEnabled = true;
+    var at = function (t) { return { x: ox + (t.tx + 0.5) * cell, y: oy + (t.ty + 0.5) * cell }; };
+    var icon = Math.max(14, Math.min(28, cell * 2));
+    SPK.mapMarks(state, m.id).forEach(function (k) {
+      var p = at(k);
+      if (k.kind === 'fire') {
+        if (k.lit) {
+          ctx.fillStyle = 'rgba(253,186,116,' + (0.45 + 0.2 * Math.sin(clock * 4)) + ')';
+          ctx.beginPath(); ctx.arc(p.x, p.y, icon * 0.95, 0, 7); ctx.fill();
+          mapUI.hits.push({ x: p.x, y: p.y, r: Math.max(24, icon), act: 'travel', id: k.id });
+        }
+        emoji(k.lit ? '🔥' : '🪵', p.x, p.y, icon);
+      } else if (k.kind === 'door') emoji(k.to && SPK.MAP_ICON[k.to] && SPK.parseMap(k.to).cave ? '🕳️' : (SPK.MAP_ICON[k.to] || '🕳️'), p.x, p.y, icon * 0.9);
+      else if (k.kind === 'chest') emoji('✨', p.x, p.y, icon * 0.8);
+      else if (k.kind === 'friend') emoji(SPK.FRIENDS[k.id].emoji, p.x, p.y, icon * 0.8);
+    });
+    if (m.id === map.id) {
+      var me = { x: ox + state.x / TILE * cell, y: oy + state.y / TILE * cell };
+      ctx.strokeStyle = '#fde047'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(me.x, me.y, icon * (0.7 + 0.15 * Math.sin(clock * 5)), 0, 7); ctx.stroke();
+      emoji('🦄', me.x, me.y, icon * 1.1);
+    }
+  }
+  function drawFriendsBook(aL, aT, aR, aB) {
+    var book = SPK.friendsBook(state), cols = Math.min(book.length, (aR - aL) > (aB - aT) ? 4 : 3);
+    var rows = Math.ceil(book.length / cols);
+    var size = Math.min((aR - aL) / cols, (aB - aT) / rows, 110);
+    var ox = (aL + aR) / 2 - cols * size / 2, oy = (aT + aB) / 2 - rows * size / 2;
+    ctx.fillStyle = '#fffbeb'; roundRect(ox - 10, oy - 10, cols * size + 20, rows * size + 20, 20); ctx.fill();
+    book.forEach(function (f, i) {
+      var x = ox + (i % cols + 0.5) * size, y = oy + (Math.floor(i / cols) + 0.5) * size;
+      ctx.fillStyle = f.found ? '#fde68a' : '#e7e5e4';
+      ctx.beginPath(); ctx.arc(x, y, size * 0.4, 0, 7); ctx.fill();
+      if (f.found) emoji(f.emoji, x, y + 1, size * 0.5);
+      else { ctx.globalAlpha = 0.5; emoji('❔', x, y + 1, size * 0.36); ctx.globalAlpha = 1; }
+    });
+  }
+  function mapTap(x, y) {
+    if (!mapUI) return;
+    for (var i = mapUI.hits.length - 1; i >= 0; i--) {
+      var h = mapUI.hits[i];
+      if (Math.hypot(x - h.x, y - h.y) > h.r + 8) continue;
+      if (h.act === 'close') { closeMap(); sfx('pop'); }
+      else if (h.act === 'tab') { mapUI.mapId = h.id; mapUI.page = 'map'; sfx('sparkle'); }
+      else if (h.act === 'book') { mapUI.page = mapUI.page === 'book' ? 'map' : 'book'; sfx('sparkle'); }
+      else if (h.act === 'trail') { closeMap(); trailUntil = clock + 8; sfx('sparkle'); }
+      else if (h.act === 'travel') {
+        var at = SPK.besideFire(h.id);
+        closeMap();
+        fade = { t: 0, dur: 0.6, swapped: false, swap: function () { teleport(at.map, at.tx, at.ty); } };
+        resetInput('travel');
+        sfx('power');
+      }
+      return;
+    }
+  }
+
   // ── Sleepy and reveal overlays ───────────────────────────────────────
   function drawSleepy() {
     var a = Math.min(1, sleepyT / 0.6);
@@ -1669,6 +1826,7 @@
       return;
     }
     if (state.mode === 'reveal') { revealT += dt; updatePickups(dt); return; }
+    if (state.mode === 'mapview') return; // the world waits while you look at the map
     if (state.mode !== 'play') return;
     if (hitPause > 0) { hitPause -= dt; return; }
     shake = Math.max(0, shake - dt);
@@ -1705,7 +1863,7 @@
     updateSwirl();
     updateRainbow(dt);
     updatePickups(dt);
-    if (pressed('map')) { trailUntil = clock + 8; sfx('sparkle'); }
+    if (pressed('map')) { openMap(); return; }
     updateFliers(dt);
     var c = clampCam(state.x, state.y);
     var k = Math.min(1, dt * 10);
@@ -2130,6 +2288,7 @@
     if (state.mode === 'play') { drawBubble(); drawHUD(); drawPowerTimers(); drawControls(); }
     if (state.mode === 'sleepy') drawSleepy();
     if (state.mode === 'reveal') drawReveal();
+    if (state.mode === 'mapview') drawMapView();
     if (fade) {
       ctx.fillStyle = 'rgba(15,10,30,' + Math.max(0, 1 - Math.abs(fade.t / fade.dur * 2 - 1)) + ')';
       ctx.fillRect(0, 0, W, H);
@@ -2163,6 +2322,7 @@
     _teleport: function (mapId, tx, ty) { teleport(mapId, tx, ty); },
     _spawn: function (kind, tx, ty) { spawnEnemy(kind, (tx + 0.5) * TILE, (ty + 0.5) * TILE, null); },
     _clearEnemies: function () { enemies = []; spores = []; },
+    mapHits: function () { return mapUI ? mapUI.hits.map(function (h) { return { x: h.x, y: h.y, r: h.r, act: h.act, id: h.id || null }; }) : []; },
     _give: function (kind) { if (SPK.POWERUPS[kind]) SPK.grantPowerup(state, kind, now()); else state.powers[kind] = true; },
     get enemies() { return enemies.length; },
   };

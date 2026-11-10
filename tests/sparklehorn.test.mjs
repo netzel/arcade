@@ -939,3 +939,34 @@ test('friends survive a save', () => {
   const back = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g)))));
   assert.deepEqual([...back.friends], ['woods:*:3,3']);
 });
+
+// ── Slice 2, Task 6: map screen and fast travel ─────────────────────────
+test('every map has a picture for the map screen', () => {
+  for (const id of REAL_MAPS) assert.ok(SPK.MAP_ICON[id], `${id} icon`);
+});
+
+test('mapMarks hides unexplored things and opened chests', () => {
+  const g = SPK.createGame('easy');
+  assert.equal(SPK.mapMarks(g, 'meadow').length, 0, 'nothing explored yet');
+  const m = SPK.parseMap('meadow');
+  g.explored.meadow = new Uint8Array(m.w * m.h);
+  const see = (id) => { const e = SPK.entity(id); g.explored.meadow[e.ty * m.w + e.tx] = 1; };
+  see(SPK.HOME_FIRE); see('meadow:C:8,8'); see('meadow:D:24,5'); see('meadow:*:2,9');
+  let marks = SPK.mapMarks(g, 'meadow');
+  assert.deepEqual([...marks.map((k) => k.kind)].sort(), ['chest', 'door', 'fire', 'friend']);
+  assert.equal(marks.find((k) => k.kind === 'fire').lit, false);
+  SPK.lightCampfire(g, SPK.HOME_FIRE); SPK.openChest(g, 'meadow:C:8,8'); SPK.meetFriend(g, 'meadow:*:2,9');
+  marks = SPK.mapMarks(g, 'meadow');
+  assert.deepEqual([...marks.map((k) => k.kind)].sort(), ['door', 'fire']);
+  assert.equal(marks.find((k) => k.kind === 'fire').lit, true);
+  assert.equal(marks.find((k) => k.kind === 'door').to, 'pebble');
+});
+
+test('travelTargets lists only lit fires that still exist', () => {
+  const g = SPK.createGame('easy');
+  assert.equal(SPK.travelTargets(g).length, 0);
+  SPK.lightCampfire(g, SPK.HOME_FIRE);
+  SPK.lightCampfire(g, 'woods:F:6,17');
+  g.campfires.push('meadow:F:0,0');
+  assert.deepEqual([...SPK.travelTargets(g)], [SPK.HOME_FIRE, 'woods:F:6,17']);
+});
