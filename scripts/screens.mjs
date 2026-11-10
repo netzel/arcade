@@ -559,6 +559,20 @@ async function brokenAudioPass(browser, vp, mode) {
   const m2 = await mz();
   check(m2.uni.x !== m.uni.x || m2.uni.y !== m.uni.y, `no-sound(${mode}) maze: taps still move the unicorn`);
   check(m2.frames > m.frames, `no-sound(${mode}) maze: game keeps animating (${m.frames} -> ${m2.frames} frames)`);
+  // Sparklehorn: title, difficulty, magic and the frame loop all work without sound
+  await page.goto(BASE + '/');
+  await page.locator('#home').waitFor();
+  await t.launch(SPK_CARD);
+  await tapEl(page.locator('#play')); await page.waitForTimeout(250);
+  await tapEl(page.locator('#easy')); await page.waitForTimeout(250);
+  await tap(vp.width * 0.3, vp.height * 0.5); await page.waitForTimeout(200);
+  const L = await page.evaluate(() => window.__spk.layout());
+  await tap(L.magic.x, L.magic.y); await page.waitForTimeout(200);
+  const k0 = await page.evaluate(() => ({ mode: window.__spk.state.mode, bolts: window.__spk.bolts, frames: window.__spk.frames }));
+  await page.waitForTimeout(400);
+  const k1 = await page.evaluate(() => window.__spk.frames);
+  check(k0.mode === 'play' && k0.bolts > 0, `no-sound(${mode}) sparkle: taps start the game and fire magic (${k0.mode}, ${k0.bolts} bolts)`);
+  check(k1 > k0.frames, `no-sound(${mode}) sparkle: game keeps animating`);
   check(t.errors.length === 0, `no-sound(${mode}): no uncaught errors${t.errors.length ? ': ' + [...new Set(t.errors)].slice(0, 3).join(' | ') : ''}`);
   await t.ctx.close();
 }
@@ -577,6 +591,186 @@ async function pauseRacePass(browser, vp) {
   });
   check(!stuck, 'bridge: a pause cancelled within the same frame does not freeze the game');
   await t.ctx.close();
+}
+
+// ── Sparklehorn Adventure: taps must always work (spec §9) ────────────────
+const SPK_CARD = 4;
+async function sparklehornPass(browser, vp) {
+  const webkitEngine = process.env.PW_ENGINE === 'webkit';
+  const t = await openContext(browser, vp);
+  const { page } = t;
+  const tap = (x, y) => (vp.mobile ? page.touchscreen.tap(x, y) : page.mouse.click(x, y));
+  const tapEl = async (loc) => { const b = await loc.boundingBox(); await tap(b.x + b.width / 2, b.y + b.height / 2); };
+  const spk = () => page.evaluate(() => {
+    const s = window.__spk;
+    return { mode: s.state.mode, map: s.state.map, x: s.state.x, y: s.state.y, bolts: s.bolts, frames: s.frames, errors: s.errors, inputs: s.inputs };
+  });
+  const layout = () => page.evaluate(() => window.__spk.layout());
+  const tapMagic = async () => { const L = await layout(); await tap(L.magic.x, L.magic.y); await page.waitForTimeout(120); };
+  const quiet = () => page.evaluate(() => { window.__spk._clearEnemies(); window.__spk._teleport('meadow', 24, 16); });
+  const cdp = !webkitEngine && vp.mobile ? await page.context().newCDPSession(page) : null;
+  const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
+
+  await t.home();
+  await t.launch(SPK_CARD);
+  await t.shot('20-sparkle-title');
+
+  // 1. First tap works
+  await tapEl(page.locator('#play'));
+  await page.waitForTimeout(300);
+  await tapEl(page.locator('#easy'));
+  await page.waitForTimeout(300);
+  await tap(vp.width * 0.3, vp.height * 0.5); // skip the intro
+  await page.waitForTimeout(200);
+  check((await spk()).mode === 'play', `sparkle: one tap each on ▶, Easy and the intro starts the game (${(await spk()).mode})`);
+  await quiet();
+
+  // 3. Walking: a drag on the joystick (Chromium touch), a tap-to-walk (WebKit touch), arrow keys (desktop)
+  let s0 = await spk();
+  const L = await layout();
+  const jx = L.joyZone.x + L.joyZone.w * 0.4, jy = L.joyZone.y + L.joyZone.h * 0.5;
+  if (cdp) {
+    await touch('touchStart', [{ x: jx, y: jy, id: 1 }]);
+    for (let i = 1; i <= 6; i++) { await touch('touchMove', [{ x: jx + i * 10, y: jy, id: 1 }]); await page.waitForTimeout(30); }
+    await page.waitForTimeout(250);
+  } else if (vp.mobile) {
+    await tap(vp.width / 2 + 100, vp.height / 2);
+    await page.waitForTimeout(600);
+  } else {
+    await page.keyboard.down('ArrowRight'); await page.waitForTimeout(400); await page.keyboard.up('ArrowRight');
+  }
+  let s1 = await spk();
+  check(s1.x > s0.x + 10, `sparkle: walking moves the unicorn (${Math.round(s0.x)} -> ${Math.round(s1.x)})`);
+
+  // 5. Multi-touch: still holding the joystick, tap Magic with a second finger
+  if (cdp) {
+    const b0 = s1.bolts, x0 = s1.x;
+    await touch('touchStart', [{ x: jx + 60, y: jy, id: 1 }, { x: L.magic.x, y: L.magic.y, id: 2 }]);
+    await page.waitForTimeout(80);
+    await touch('touchEnd', [{ x: jx + 60, y: jy, id: 1 }]); // finger 2 lifts, finger 1 stays
+    await page.waitForTimeout(250);
+    const s2 = await spk();
+    check(s2.bolts > b0 && s2.x > x0 + 5, `sparkle: walk + magic at the same time (bolts ${b0}->${s2.bolts}, moved ${Math.round(s2.x - x0)})`);
+    check(s2.inputs.active === 1, `sparkle: lifting one finger leaves the other walking (${s2.inputs.active} active)`);
+    // 6. No stuck input: blur while the joystick is held
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    const sb = await spk();
+    await page.waitForTimeout(300);
+    const sc = await spk();
+    check(sb.inputs.active === 0 && sb.inputs.lastReset === 'blur' && Math.abs(sc.x - sb.x) < 1, `sparkle: losing focus releases a held joystick (${sb.inputs.active} active, moved ${Math.round(sc.x - sb.x)})`);
+    await touch('touchEnd', []);
+  } else {
+    if (vp.mobile) console.log('   – multi-touch check skipped on WebKit (no CDP); covered by the input unit tests');
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(100);
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    const sb = await spk();
+    await page.waitForTimeout(300);
+    const sc = await spk();
+    await page.keyboard.up('ArrowRight');
+    check(Math.abs(sc.x - sb.x) < 1 && sb.inputs.lastReset === 'blur', `sparkle: losing focus stops a held key (moved ${Math.round(sc.x - sb.x)})`);
+  }
+
+  // 4. Magic fires
+  let b = (await spk()).bolts;
+  await tapMagic();
+  check((await spk()).bolts > b, 'sparkle: tapping ✨ fires magic');
+  await t.shot('21-sparkle-play');
+
+  // 7. Rotation mid-play (phones and iPads)
+  if (vp.mobile) {
+    await page.setViewportSize({ width: vp.height, height: vp.width });
+    await page.waitForTimeout(500);
+    if (await page.locator('#rotate-hint').isVisible()) await page.locator('#rotate-dismiss').click();
+    const R = await layout();
+    check(R.magic.x > vp.height / 2 && R.magic.y > vp.width / 2, 'sparkle: after rotating, ✨ sits in the bottom-right');
+    b = (await spk()).bolts;
+    await tap(R.magic.x, R.magic.y); await page.waitForTimeout(120);
+    check((await spk()).bolts > b, 'sparkle: after rotating, ✨ still fires');
+    await t.shot('22-sparkle-rotated');
+    await page.setViewportSize({ width: vp.width, height: vp.height });
+    await page.waitForTimeout(400);
+  }
+
+  // 8 + 9. Pause menu: no Start Over, Save is there; taps work after Keep Playing
+  await t.menu();
+  await page.waitForTimeout(300);
+  const tiles = (await t.tileNames()).join(' | ');
+  check(!/Start Over/.test(tiles) && /Save/.test(tiles), `sparkle: menu has Save and no Start Over (${tiles.replace(/\n/g, ' ')})`);
+  await page.getByRole('button', { name: /Keep Playing/ }).click();
+  await page.waitForTimeout(300);
+  b = (await spk()).bolts;
+  await tapMagic();
+  check((await spk()).bolts > b, 'sparkle: ✨ works after pause and Keep Playing');
+
+  // 11. Continue restores where you were
+  await page.evaluate(() => { window.__spk._clearEnemies(); window.__spk._teleport('pebble', 5, 11); });
+  await t.menu();
+  await page.getByRole('button', { name: /Arcade/ }).click();
+  await page.locator('#home').waitFor();
+  await page.waitForTimeout(400);
+  check(/Continue/.test(await page.locator('.game-card').nth(SPK_CARD).innerText()), 'sparkle: home card offers Continue');
+  await t.launch(SPK_CARD);
+  check(await page.locator('#welcome').isVisible(), 'sparkle: Continue shows Welcome back');
+  await tapEl(page.locator('#resume'));
+  await page.waitForTimeout(300);
+  let s = await spk();
+  check(s.mode === 'play' && s.map === 'pebble', `sparkle: Continue puts you back in the cave (${s.mode}, ${s.map})`);
+
+  // 10. Arcade → browser Back: taps still work, and the adventure is still there
+  await t.menu();
+  await page.getByRole('button', { name: /Arcade/ }).click();
+  await page.locator('#home').waitFor();
+  await page.waitForTimeout(300);
+  await page.goBack();
+  await page.waitForFunction(() => window.__spk && document.getElementById('sga-chrome'));
+  await page.waitForTimeout(900);
+  if (await page.locator('#rotate-hint').isVisible()) await page.locator('#rotate-dismiss').click();
+  if (await page.locator('#welcome').isVisible()) await tapEl(page.locator('#resume'));
+  await page.waitForTimeout(300);
+  s = await spk();
+  check(s.mode === 'play' && s.map === 'pebble', `sparkle: Back from the arcade returns to the adventure (${s.mode}, ${s.map})`);
+  b = s.bolts;
+  await tapMagic();
+  check((await spk()).bolts > b, 'sparkle: ✨ works after Arcade → Back');
+
+  // A reload (pull-to-refresh) mid-adventure must not lose it
+  await page.reload();
+  await page.waitForFunction(() => window.__spk && document.getElementById('sga-chrome'));
+  await page.waitForTimeout(1200);
+  if (await page.locator('#rotate-hint').isVisible()) await page.locator('#rotate-dismiss').click();
+  check(await page.locator('#welcome').isVisible(), 'sparkle: reloading the page comes back to Welcome back, not the title');
+  await tapEl(page.locator('#resume'));
+  await page.waitForTimeout(200);
+  check((await spk()).map === 'pebble', 'sparkle: …and to the same place');
+
+  // ✨ New from the home card really starts a new adventure
+  await t.menu();
+  await page.getByRole('button', { name: /Arcade/ }).click();
+  await page.locator('#home').waitFor();
+  await page.waitForTimeout(300);
+  await page.locator('.game-card').nth(SPK_CARD).getByRole('button', { name: /New/ }).click();
+  await page.getByRole('button', { name: 'Start new' }).click();
+  await t.loaded();
+  check(await page.locator('#play').isVisible(), 'sparkle: ✨ New opens the title screen for a fresh adventure');
+  await page.waitForTimeout(300);
+
+  check(t.errors.length === 0, `sparkle: no page errors${t.errors.length ? ': ' + [...new Set(t.errors)].slice(0, 3).join(' | ') : ''}`);
+  await t.ctx.close();
+
+  // 2. Double-tap ▶: one difficulty screen, no errors
+  const t2 = await openContext(browser, vp);
+  const tap2 = (x, y) => (vp.mobile ? t2.page.touchscreen.tap(x, y) : t2.page.mouse.click(x, y));
+  await t2.home();
+  await t2.launch(SPK_CARD);
+  const pb = await t2.page.locator('#play').boundingBox();
+  await tap2(pb.x + pb.width / 2, pb.y + pb.height / 2);
+  await tap2(pb.x + pb.width / 2, pb.y + pb.height / 2);
+  await t2.page.waitForTimeout(400);
+  const after = await t2.page.evaluate(() => ({ mode: window.__spk.state.mode, errors: window.__spk.errors, title: !document.getElementById('title').classList.contains('hidden') }));
+  check(!after.title && ['choose', 'intro'].includes(after.mode) && after.errors === 0, `sparkle: double-tapping ▶ is safe (${after.mode})`);
+  check(t2.errors.length === 0, 'sparkle: no page errors after a double-tap');
+  await t2.ctx.close();
 }
 
 await fs.mkdir(OUT, { recursive: true });
@@ -599,6 +793,8 @@ try {
     await unicornPass(browser, vp);
     console.log("  ↳ Cece's Unicorn Maze");
     await mazePass(browser, vp);
+    console.log('  ↳ Sparklehorn Adventure');
+    await sparklehornPass(browser, vp);
     if (vp.savesPass) {
       console.log('  ↳ with saves turned on');
       await savesPass(browser, vp);

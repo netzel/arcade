@@ -8,7 +8,7 @@
 // its taps are stopped at the shadow host so a game's own tap handlers never
 // see them.
 import { readSaves, writeSave, deleteSave, getSlot, readSettings, writeSettings } from './saves.js';
-import { h, safeStorage, createSheet, tile, createToast, slotLabel, slotRow, setRestore, gameUrl } from './ui.js';
+import { h, safeStorage, createSheet, tile, createToast, slotLabel, slotRow, setRestore, gameUrl, takeFresh } from './ui.js';
 
 const CONFIG = window.ARCADE_CONFIG || { siteName: 'Super Games Arcade', players: [], games: [] };
 const GAMES = CONFIG.games || [];
@@ -84,10 +84,20 @@ function start() {
   B.setMuted(isMuted());
 
   // ── Bridge events ──────────────────────────────────────────────────────
+  // Long adventures (startOver: false) never quietly start over: if this page
+  // loaded without a save (a reload, or Back from the arcade), pick up the
+  // Continue save, unless the player chose "✨ New" on the home card.
+  const longAdventure = game.saves && game.startOver === false;
+  const fresh = longAdventure && takeFresh(game.id);
+  let continuing = false;
   B.on((type, data) => {
     if (type === 'boot') wantedRestore = !!data.hadRestore;
     else if (type === 'register') {
       canSave = !!data.canSave;
+      if (longAdventure && canSave && !wantedRestore && !fresh && !continuing) {
+        const auto = getSlot(storage, playerId(), game.id, 'auto');
+        if (auto && setRestore(game.id, auto)) { continuing = true; location.replace(location.href); return; }
+      }
       if (wantedRestore) {
         if (data.restored) toast('Welcome back! 🌟');
         else if (data.restoreFailed) toast("Couldn't open that save 😕 Starting fresh.");
@@ -104,7 +114,12 @@ function start() {
     let snap;
     try { snap = B.getState(); } catch (e) { console.error('[arcade] getState failed', e); return; }
     if (!snap || !snap.supported) return;
-    if (snap.state == null) { deleteSave(storage, playerId(), game.id, 'auto'); return; }
+    if (snap.state == null) {
+      // Nothing to save (e.g. a title screen). Long adventures keep their spot.
+      if (game.startOver !== false) deleteSave(storage, playerId(), game.id, 'auto');
+      return;
+    }
+    if (continuing) return;
     writeSave(storage, playerId(), game.id, 'auto', { state: snap.state, version: snap.version, thumb: B.thumbnail() });
     B.refreshThumb?.();
   }

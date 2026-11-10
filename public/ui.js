@@ -116,5 +116,16 @@ export function setRestore(gameId, entry) {
   } catch { return false; }
 }
 
+/**
+ * "✨ New" from the home card: the next load of this game page should start
+ * fresh instead of picking up the Continue save (long adventures continue
+ * automatically after a reload or Back otherwise; see play.js).
+ */
+const freshKey = (gameId) => `sga:fresh:${gameId}`;
+export function markFresh(gameId) { try { sessionStorage.setItem(freshKey(gameId), '1'); } catch { /* ignore */ } }
+export function takeFresh(gameId) {
+  try { const v = sessionStorage.getItem(freshKey(gameId)) === '1'; sessionStorage.removeItem(freshKey(gameId)); return v; } catch { return false; }
+}
+
 /** URL of a game page (cache-busted per build). */
 export function gameUrl(game, buildId) { return `/${game.path.replace(/^\//, '')}${buildId ? `?b=${buildId}` : ''}`; }

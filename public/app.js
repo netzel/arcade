@@ -3,7 +3,7 @@
 // play.js for the in-game menu): no iframe sits between a finger and a game.
 
 import { readSaves, deleteSave, getSlot, readSettings, writeSettings } from './saves.js';
-import { h, safeStorage, createSheet, createToast, slotRow, setRestore, gameUrl } from './ui.js';
+import { h, safeStorage, createSheet, createToast, slotRow, setRestore, gameUrl, markFresh } from './ui.js';
 import { timeAgo } from './saves.js';
 
 const CONFIG = window.ARCADE_CONFIG || { siteName: 'Super Games Arcade', players: [], games: [] };
@@ -72,6 +72,7 @@ function playGame(game, mode = 'new', slot = null) {
   if (game.saves && mode === 'continue') entry = getSlot(storage, playerId(), game.id, 'auto');
   else if (game.saves && mode === 'slot') entry = getSlot(storage, playerId(), game.id, slot);
   setRestore(game.id, entry);
+  if (mode === 'new') markFresh(game.id);
   location.href = gameUrl(game, CONFIG.buildId);
 }
 

@@ -39,7 +39,7 @@ npm run dev          # builds, then serves at http://localhost:4600
   "background": "#000000",                // color around the game
   "menuButton": "top-left",               // where the ⏸ button sits: top-left | top-right | bottom-left | bottom-right
   "saves": false,                         // true = Save/Load/Continue for this game; false (default) = always starts fresh
-  "startOver": true                       // false hides in-game Start Over (for long adventures; ✨ New on the home card still works)
+  "startOver": true                       // false = long adventure: no in-game Start Over, and a reload or Back picks up where you left off (✨ New on the home card still starts fresh)
 }
 ```
 
