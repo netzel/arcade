@@ -787,7 +787,11 @@ async function sparklehornPass(browser, vp) {
   // Cloud Hop: walking (or tapping) across a cloud gap hops it
   await page.evaluate(() => { const s = window.__spk; s._give('hop'); s._clearEnemies(); s._teleport('cloud', 21, 12); });
   await page.waitForTimeout(400);
-  await walkTo(24, 12, 'ArrowRight'); // tap right on the gap: hop over once, and stay
+  // tap right on the gap (or hold →): hop over once, and stay. Wait for the landing, not a
+  // fixed time — desktop WebKit software-renders at ~10 fps, so game time runs slow there.
+  const landed = () => page.waitForFunction(() => window.__spk.state.x / 32 >= 26, null, { timeout: 6000 }).catch(() => {});
+  if (vp.mobile) { const p = await toScreen(24, 12); await tap(p.x, p.y); await landed(); await page.waitForTimeout(1200); }
+  else { await page.keyboard.down('ArrowRight'); await landed(); await page.keyboard.up('ArrowRight'); await page.waitForTimeout(300); }
   const hopTx = await page.evaluate(() => Math.floor(window.__spk.state.x / 32));
   check(hopTx >= 26, `sparkle: Cloud Hop hops over the cloud gap and stays over (tile ${hopTx})`);
   const f0 = await spk();
