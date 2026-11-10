@@ -506,6 +506,14 @@
     var f = state.fx.swirl;
     if (f && f.orbs > 0) f.orbs--;
   };
+  SPK.speedMul = function (state, nowMs) { return SPK.hasPowerup(state, 'zoomy', nowMs) ? 1.6 : 1; };
+  // Horn Charge: dash length and hit radius in tiles, and damage.
+  SPK.hornStats = function (state, nowMs) {
+    var mega = SPK.hasPowerup(state, 'mega', nowMs);
+    return { dist: SPK.hasPowerup(state, 'zoomy', nowMs) ? 3.5 : 2.5, radius: mega ? 1.9 : 0.95, dmg: mega ? 99 : SPK.hornDamage(state) };
+  };
+  SPK.magnetRange = function (state, nowMs) { return SPK.hasPowerup(state, 'magnet', nowMs) ? 9 : 1.4; };
+  SPK.boltDamage = function (state) { return state.powers.bigSparkle ? 2 : 1; };
   // Angles of the bolts one Magic press fires.
   SPK.fireMagic = function (state, aim, nowMs) {
     return SPK.fanAngles(aim, SPK.hasPowerup(state, 'starBurst', nowMs) ? 5 : 1, 50);
@@ -971,7 +979,7 @@
     map = SPK.parseMap(id);
     chunks = {};
     if (!state.explored[id]) state.explored[id] = new Uint8Array(map.w * map.h);
-    bolts = []; pickups = []; parts = []; horn.dash = null;
+    bolts = []; pickups = []; parts = []; trail = []; horn.dash = null;
     spawnGroups(state.x, state.y);
   }
   function collideCtx() { return { broken: state.broken, powers: state.powers }; }
@@ -1053,7 +1061,7 @@
     r.spawn.forEach(function (s) { spawnEnemy(s.kind, s.x, s.y, e.group); });
     if (Math.random() < 0.30) for (var i = 0, n = 1 + Math.floor(Math.random() * 3); i < n; i++) dropPickup('gem', e.x, e.y);
     if (Math.random() < 0.12) dropPickup('heart', e.x, e.y);
-    else if (Math.random() < 0.10) dropPickup(Math.random() < 0.5 ? 'starBurst' : 'swirl', e.x, e.y);
+    else if (Math.random() < 0.10) { var kinds = Object.keys(SPK.POWERUPS); dropPickup(kinds[Math.floor(Math.random() * kinds.length)], e.x, e.y); }
     onEnemyPopped(e);
   }
   function hurtEnemy(e, n) {
@@ -1158,7 +1166,7 @@
   function fireMagic() {
     var angles = SPK.fireMagic(state, aimAngle(), now());
     angles.forEach(function (a, i) {
-      bolts.push({ x: state.x + Math.cos(a) * 10, y: state.y + Math.sin(a) * 10, vx: Math.cos(a) * 9 * TILE, vy: Math.sin(a) * 9 * TILE, life: 0.9, dmg: 1,
+      bolts.push({ x: state.x + Math.cos(a) * 10, y: state.y + Math.sin(a) * 10, vx: Math.cos(a) * 9 * TILE, vy: Math.sin(a) * 9 * TILE, life: 0.9, dmg: SPK.boltDamage(state),
                    color: angles.length > 1 ? RAINBOW[i % RAINBOW.length] : null });
     });
     stats.bolts++;
@@ -1185,7 +1193,7 @@
       }
       for (var j = 0; j < enemies.length; j++) {
         var e = enemies[j];
-        if (e.hp > 0 && Math.hypot(e.x - b.x, e.y - b.y) < TILE * 0.5) { hurtEnemy(e, b.dmg); bolts.splice(i, 1); break; }
+        if (e.hp > 0 && Math.hypot(e.x - b.x, e.y - b.y) < TILE * (b.dmg > 1 ? 0.65 : 0.5)) { hurtEnemy(e, b.dmg); bolts.splice(i, 1); break; }
       }
     }
   }
@@ -1197,17 +1205,19 @@
       sfx('whoosh');
     }
     if (!horn.dash) return;
-    var h = horn.dash, step = (2.5 * TILE / h.dur) * dt;
+    var hs = SPK.hornStats(state, now());
+    var h = horn.dash, step = (hs.dist * TILE / h.dur) * dt;
+    h.mega = hs.radius > 1;
     h.t += dt;
     var res = SPK.moveAndSlide(map, { x: state.x, y: state.y, r: BODY_R }, Math.cos(h.dir) * step, Math.sin(h.dir) * step, collideCtx());
     state.x = res.x; state.y = res.y;
     onHornContact(res.hit);
     burst(state.x, state.y, 1, ['#f0abfc', '#ffffff'], 20);
-    var dmg = SPK.hornDamage(state);
     for (var i = 0; i < enemies.length; i++) {
       var e = enemies[i];
-      if (e.hp > 0 && h.hit.indexOf(e) < 0 && Math.hypot(e.x - state.x, e.y - state.y) < TILE * 0.95) { h.hit.push(e); hurtEnemy(e, dmg); }
+      if (e.hp > 0 && h.hit.indexOf(e) < 0 && Math.hypot(e.x - state.x, e.y - state.y) < TILE * hs.radius) { h.hit.push(e); hurtEnemy(e, hs.dmg); }
     }
+    if (h.mega) burst(state.x, state.y, 3, ['#fb7185', '#fde047', '#ffffff'], 140);
     if (h.t >= h.dur) horn.dash = null;
   }
   function updatePickups(dt) {
@@ -1216,7 +1226,8 @@
       p.t += dt;
       if (p.z > 0 || p.vz > 0) { p.vz -= 400 * dt; p.z = Math.max(0, p.z + p.vz * dt); p.x += p.vx * dt; p.y += p.vy * dt; if (p.z === 0) { p.vz = 0; p.vx = p.vy = 0; } }
       var d = Math.hypot(p.x - state.x, p.y - state.y);
-      if (p.t > 0.35 && d < TILE * 1.4) { p.x += (state.x - p.x) * Math.min(1, dt * 10); p.y += (state.y - p.y) * Math.min(1, dt * 10); }
+      var reach = p.kind === 'gem' ? SPK.magnetRange(state, now()) : 1.4;
+      if (p.t > 0.35 && d < TILE * reach) { var pull = d < TILE * 1.4 ? 10 : 4; p.x += (state.x - p.x) * Math.min(1, dt * pull); p.y += (state.y - p.y) * Math.min(1, dt * pull); }
       if (p.t > 0.35 && d < TILE * 0.45) {
         pickups.splice(i, 1);
         if (p.kind === 'gem') { state.gems++; sfx('gem'); }
@@ -1287,6 +1298,7 @@
         if (c.gems) for (var g = 0; g < Math.min(c.gems, 12); g++) flyGem(x, y - 8, g * 0.05);
         if (c.powerup) dropPickup(c.powerup, x, y);
         if (c.heartPiece) heartPieceFx(x, y);
+        if (c.upgrade === 'bigSparkle') showReveal({ item: '✨', picture: ['🦄', '✨', '➡️', '💥'], text: 'Big Sparkle! Bigger, stronger magic!' });
       } else if (e.kind === 'H') {
         if (SPK.collectHeartPiece(state, e.id)) { heartPieceFx(x, y); onDiscovery(); }
       } else if (e.kind === 'F') {
@@ -1339,6 +1351,45 @@
     if (revealT > 1) emoji('👆', cx, cy + ch * 0.4 + Math.sin(clock * 5) * 3, m * 0.07);
   }
 
+
+  // ── Rainbow Trail and Zoomy Hooves ───────────────────────────────────
+  var trail = [], trailT = 0;
+  function updateRainbow(dt) {
+    var on = SPK.hasPowerup(state, 'rainbow', now());
+    trailT -= dt;
+    if (on && trailT <= 0) {
+      trailT = 0.06;
+      var last = trail[trail.length - 1];
+      if (!last || Math.hypot(last.x - state.x, last.y - state.y) > 4) trail.push({ x: state.x, y: state.y + 8, t: 0, i: trail.length });
+    }
+    for (var i = trail.length - 1; i >= 0; i--) { trail[i].t += dt; if (trail[i].t > 1.4) trail.splice(i, 1); }
+    if (!trail.length) return;
+    for (var j = 0; j < enemies.length; j++) {
+      var e = enemies[j];
+      e.rbCd = Math.max(0, (e.rbCd || 0) - dt);
+      if (e.hp <= 0 || e.rbCd > 0) continue;
+      for (var k = 0; k < trail.length; k++) {
+        if (Math.hypot(trail[k].x - e.x, trail[k].y - e.y) < TILE * 0.5) { e.rbCd = 0.5; hurtEnemy(e, 1); break; }
+      }
+    }
+  }
+  function drawRainbow() {
+    trail.forEach(function (p) {
+      ctx.globalAlpha = Math.max(0, 1 - p.t / 1.4) * 0.8;
+      ctx.fillStyle = RAINBOW[p.i % RAINBOW.length];
+      ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 7); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+  function drawZoomy() {
+    if (!moving || !SPK.hasPowerup(state, 'zoomy', now())) return;
+    ctx.strokeStyle = 'rgba(253,224,71,.8)'; ctx.lineWidth = 2;
+    for (var i = 0; i < 3; i++) {
+      var off = (i - 1) * 9, back = 18 + ((clock * 90 + i * 13) % 14);
+      var cx = state.x - Math.cos(state.facing) * back - Math.sin(state.facing) * off, cy = state.y - Math.sin(state.facing) * back + Math.cos(state.facing) * off;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - Math.cos(state.facing) * 10, cy - Math.sin(state.facing) * 10); ctx.stroke();
+    }
+  }
 
   // ── Swirl Shield ─────────────────────────────────────────────────────
   function updateSwirl() {
@@ -1608,7 +1659,8 @@
     }
     moving = !!(v.x || v.y);
     if (v.x || v.y) {
-      var res = SPK.moveAndSlide(map, { x: state.x, y: state.y, r: BODY_R }, v.x * SPEED * dt, v.y * SPEED * dt, collideCtx());
+      var sp = SPEED * SPK.speedMul(state, now());
+      var res = SPK.moveAndSlide(map, { x: state.x, y: state.y, r: BODY_R }, v.x * sp * dt, v.y * sp * dt, collideCtx());
       if (walkTo && res.hit.length && Math.hypot(res.x - state.x, res.y - state.y) < 0.5) walkTo = null;
       state.x = res.x; state.y = res.y;
       state.facing = Math.atan2(v.y, v.x);
@@ -1628,6 +1680,7 @@
     updateMagic(dt);
     updateEnemies(dt);
     updateSwirl();
+    updateRainbow(dt);
     updatePickups(dt);
     if (pressed('map')) { trailUntil = clock + 8; sfx('sparkle'); }
     updateFliers(dt);
@@ -1914,6 +1967,11 @@
         emoji(SPK.POWERUPS[p.kind].icon, p.x, p.y - bob - 6, TILE * 0.5);
       }
     });
+    drawRainbow();
+    drawZoomy();
+    if (horn.dash && horn.dash.mega) {
+      ctx.fillStyle = 'rgba(251,113,133,.25)'; ctx.beginPath(); ctx.arc(state.x, state.y, TILE * 1.9, 0, 7); ctx.fill();
+    }
     var list = enemies.slice().sort(function (a, b) { return a.y - b.y; });
     var drewPlayer = false;
     for (var i = 0; i < list.length; i++) {
@@ -1930,6 +1988,7 @@
     bolts.forEach(function (b) {
       var a = Math.atan2(b.vy, b.vx);
       ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a);
+      if (b.dmg > 1) ctx.scale(1.5, 1.5);
       ctx.fillStyle = 'rgba(253,224,71,.35)'; ctx.beginPath(); ctx.ellipse(-8, 0, 12, 5, 0, 0, 7); ctx.fill();
       ctx.fillStyle = b.color || '#fef08a'; ctx.beginPath(); ctx.arc(0, 0, 5, 0, 7); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(1, -1, 2, 0, 7); ctx.fill();

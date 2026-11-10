@@ -847,3 +847,54 @@ test('the critters have a different picture hint at every stage', () => {
   step(() => { SPK.openChest(g, 'woods:C:26,24'); });
   assert.equal(seen.size, 7);
 });
+
+// ── Slice 2, Task 4: power-ups and Big Sparkle ──────────────────────────
+test('the new power-ups last as designed and a second one refreshes', () => {
+  const want = { zoomy: 15, rainbow: 12, magnet: 20, mega: 10 };
+  for (const [k, secs] of Object.entries(want)) {
+    assert.equal(SPK.POWERUPS[k].secs, secs, k);
+    const g = SPK.createGame('easy');
+    SPK.grantPowerup(g, k, 0);
+    assert.ok(SPK.hasPowerup(g, k, secs * 1000 - 1));
+    assert.ok(!SPK.hasPowerup(g, k, secs * 1000 + 1));
+    SPK.grantPowerup(g, k, 5000);
+    assert.ok(SPK.hasPowerup(g, k, secs * 1000 + 4000), `${k} refreshed`);
+  }
+});
+
+test('zoomy hooves: faster walking and a longer horn dash', () => {
+  const g = SPK.createGame('easy');
+  assert.equal(SPK.speedMul(g, 0), 1);
+  assert.equal(SPK.hornStats(g, 0).dist, 2.5);
+  SPK.grantPowerup(g, 'zoomy', 0);
+  assert.equal(SPK.speedMul(g, 100), 1.6);
+  assert.equal(SPK.hornStats(g, 100).dist, 3.5);
+});
+
+test('mega horn: twice as big and pops anything in one hit', () => {
+  const g = SPK.createGame('easy');
+  const base = SPK.hornStats(g, 0);
+  assert.equal(base.radius, 0.95);
+  assert.equal(base.dmg, SPK.hornDamage(g));
+  SPK.grantPowerup(g, 'mega', 0);
+  const m = SPK.hornStats(g, 100);
+  assert.equal(m.radius, 1.9);
+  assert.ok(m.dmg >= SPK.ENEMIES.slimeBig.hp && m.dmg >= SPK.ENEMIES.mushroom.hp);
+});
+
+test('gem magnet reaches far', () => {
+  const g = SPK.createGame('easy');
+  assert.equal(SPK.magnetRange(g, 0), 1.4);
+  SPK.grantPowerup(g, 'magnet', 0);
+  assert.equal(SPK.magnetRange(g, 100), 9);
+});
+
+test('big sparkle is a chest upgrade that makes bolts do 2', () => {
+  const g = SPK.createGame('easy');
+  assert.equal(SPK.boltDamage(g), 1);
+  const id = Object.keys(SPK.CHESTS).find((k) => SPK.CHESTS[k].upgrade === 'bigSparkle');
+  assert.ok(id && id.startsWith('grotto:'), 'Big Sparkle waits in the grotto');
+  SPK.openChest(g, id);
+  assert.equal(g.powers.bigSparkle, true);
+  assert.equal(SPK.boltDamage(g), 2);
+});
