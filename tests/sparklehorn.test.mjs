@@ -206,7 +206,7 @@ test('layout: buttons do not overlap each other or the arcade menu corner', () =
 });
 
 // ── Task 4: maps & collision ────────────────────────────────────────────
-const REAL_MAPS = ['meadow', 'pebble'];
+const REAL_MAPS = ['meadow', 'pebble', 'woods', 'grotto', 'bubble'];
 
 test('maps parse with consistent widths', () => {
   for (const id of REAL_MAPS) {
@@ -214,7 +214,7 @@ test('maps parse with consistent widths', () => {
     const m = SPK.parseMap(id);
     assert.equal(m.h, rows.length);
     for (const r of rows) assert.equal(r.length, m.w, `${id} row width`);
-    const starts = m.entities.filter((e) => e.kind === (id === 'meadow' ? '@' : 'U'));
+    const starts = m.entities.filter((e) => e.kind === (id === 'meadow' ? '@' : id === 'woods' ? '>' : 'U'));
     assert.equal(starts.length, 1, `${id} has one start`);
   }
   assert.equal(SPK.parseMap('meadow').w, 48);
@@ -236,7 +236,7 @@ test('entity ids are stable and unique', () => {
 
 test('every door has a matching return door', () => {
   const doors = [];
-  for (const id of REAL_MAPS) for (const e of SPK.parseMap(id).entities) if (e.kind === 'D' || e.kind === 'U') doors.push(e.id);
+  for (const id of REAL_MAPS) for (const e of SPK.parseMap(id).entities) if (e.kind === 'D' || e.kind === 'U' || e.kind === '>') doors.push(e.id);
   assert.ok(doors.length >= 2);
   for (const d of doors) {
     const link = SPK.DOORS[d];
@@ -292,7 +292,7 @@ function flood(m, sx, sy, passBoulders) {
 }
 
 test('every chest, heart spot, campfire and the pedestal is reachable', () => {
-  const KEY = ['C', 'H', 'F', 'P', 'D', 'U'];
+  const KEY = ['C', 'H', 'F', 'P', 'D', 'U', '>'];
   const meadow = SPK.parseMap('meadow');
   const start = meadow.entities.find((e) => e.kind === '@');
   const withB = flood(meadow, start.tx, start.ty, true);
@@ -302,8 +302,7 @@ test('every chest, heart spot, campfire and the pedestal is reachable', () => {
     assert.ok(withB(e), `${e.id} reachable once boulders are broken`);
     if (!withoutB(e)) blocked.push(e.id);
   }
-  assert.equal(blocked.length, 1, `exactly one thing hides behind the boulder: ${blocked}`);
-  assert.ok(blocked[0].includes(':C:'), 'and it is a chest');
+  assert.deepEqual(blocked.sort(), ['meadow:>:47,14', 'meadow:C:4,28'], `the secret chest and the way to the woods hide behind boulders: ${blocked}`);
   const pebble = SPK.parseMap('pebble');
   const u = pebble.entities.find((e) => e.kind === 'U');
   const r = flood(pebble, u.tx, u.ty, false);
@@ -317,7 +316,7 @@ test('content counts match the design', () => {
   assert.equal(count('meadow', 'H'), 3);
   assert.equal(count('meadow', 'S'), 6);
   assert.equal(count('meadow', 'M'), 2);
-  assert.equal(count('meadow', 'B'), 1);
+  assert.equal(count('meadow', 'B'), 2);
   assert.equal(count('pebble', 'F'), 1);
   assert.equal(count('pebble', 'C'), 3);
   assert.equal(count('pebble', 'P'), 1);
@@ -497,7 +496,9 @@ test('every chest has contents and every contents entry is a real chest', () => 
   for (const id of chestIds) assert.ok(SPK.CHESTS[id], `${id} has contents`);
   for (const id of Object.keys(SPK.CHESTS)) assert.ok(chestIds.includes(id), `${id} is on a map`);
   const kinds = Object.values(SPK.CHESTS).map((c) => Object.keys(c)[0]);
-  assert.equal(kinds.filter((k) => k === 'powerup').length, 2, 'one Star Burst in the meadow, one Swirl in the cave');
+  const pu = Object.values(SPK.CHESTS).filter((c) => c.powerup).map((c) => c.powerup);
+  for (const k of Object.keys(SPK.POWERUPS)) assert.ok(pu.includes(k), `some chest holds ${k}`);
+  for (const k of pu) assert.ok(SPK.POWERUPS[k], `${k} is a real power-up`);
   assert.equal(SPK.CHESTS['pebble:C:15,16'].powerup, 'swirl');
 });
 
@@ -662,3 +663,125 @@ test('a tap anywhere that is not a button walks you there (not just in the joyst
 });
 
 export { SPK, near };
+
+// ── Slice 2, Task 1: the woods ──────────────────────────────────────────
+// Things on the woods pond island need Bubble Hooves.
+const ISLAND = ['woods:C:26,24', 'woods:H:26,25'];
+
+test('woods is 56x36 and its west exit links back to the meadow', () => {
+  const m = SPK.parseMap('woods');
+  assert.equal(m.w, 56); assert.equal(m.h, 36);
+  assert.equal(SPK.DOORS['woods:>:0,14'].at, 'meadow:>:47,14');
+  assert.equal(SPK.DOORS['meadow:>:47,14'].at, 'woods:>:0,14');
+  assert.deepEqual({ ...SPK.doorArrival('meadow:>:47,14') }, { map: 'meadow', tx: 46, ty: 14 });
+  assert.deepEqual({ ...SPK.doorArrival('woods:>:0,14') }, { map: 'woods', tx: 1, ty: 14 });
+});
+
+test('the woods are behind the east boulder, which needs Mighty Horn', () => {
+  const m = SPK.parseMap('meadow');
+  assert.equal(SPK.tileAt(m, 46, 14), 'B');
+  assert.equal(SPK.tileAt(m, 47, 14), '>');
+  assert.equal(SPK.isSolid(m, 47, 14, null), false, 'the exit itself is walkable');
+});
+
+test('everything in the woods is reachable (the island needs water)', () => {
+  const m = SPK.parseMap('woods');
+  const KEY = ['C', 'H', 'F', 'D', '*', '>'];
+  const r = flood(m, 0, 14, true);
+  for (const e of m.entities.filter((e) => KEY.includes(e.kind))) {
+    if (ISLAND.includes(e.id)) assert.ok(!r(e), `${e.id} needs Bubble Hooves`);
+    else assert.ok(r(e), `${e.id} reachable`);
+  }
+});
+
+test('woods content counts', () => {
+  const count = (k) => SPK.parseMap('woods').entities.filter((e) => e.kind === k).length;
+  assert.deepEqual(['F', 'C', 'H', 'S', 'M', '*', 'D', 'B', 'L'].map(count), [2, 8, 1, 5, 6, 3, 2, 1, 1]);
+});
+
+test('exits include edge paths', () => {
+  assert.ok(SPK.EXITS['>'] && SPK.EXITS.D && SPK.EXITS.U);
+});
+
+// ── Slice 2, Task 2: two caves, their powers, light, bats ───────────────
+const WATER_ONLY = [...ISLAND, 'bubble:C:15,11', 'bubble:H:16,12', 'bubble:*:15,13'];
+const CAVES = { grotto: [36, 24, 'grotto:U:1,12', 'woods:D:30,4'], bubble: [34, 22, 'bubble:U:32,11', 'woods:D:51,26'] };
+
+test('the grotto and bubble cavern parse and link to their woods doors', () => {
+  for (const [id, [w, h, exit, door]] of Object.entries(CAVES)) {
+    const m = SPK.parseMap(id);
+    assert.equal(m.w, w); assert.equal(m.h, h);
+    assert.ok(m.cave, `${id} is a cave`);
+    assert.equal(SPK.DOORS[door].at, exit);
+    assert.equal(SPK.DOORS[exit].at, door);
+  }
+  assert.deepEqual({ ...SPK.doorArrival('woods:D:30,4') }, { map: 'woods', tx: 30, ty: 5 }, 'out of the grotto onto the broken boulder spot');
+  assert.deepEqual({ ...SPK.doorArrival('woods:D:51,26') }, { map: 'woods', tx: 50, ty: 26 });
+});
+
+test('everything in each cave is reachable; island things need water, and are reachable with it', () => {
+  const KEY = ['C', 'H', 'F', 'P', '*', 'U'];
+  for (const [id, [, , exit]] of Object.entries(CAVES)) {
+    const m = SPK.parseMap(id);
+    const e0 = SPK.entity(exit);
+    const dry = flood(m, e0.tx, e0.ty, true);
+    for (const e of m.entities.filter((e) => KEY.includes(e.kind))) {
+      if (WATER_ONLY.includes(e.id)) assert.ok(!dry(e), `${e.id} needs Bubble Hooves`);
+      else assert.ok(dry(e), `${e.id} reachable`);
+    }
+  }
+  // with bubble hooves, the water things are reachable
+  for (const id of WATER_ONLY) {
+    const mapId = id.split(':')[0];
+    const m = SPK.parseMap(mapId);
+    const start = mapId === 'woods' ? { tx: 0, ty: 14 } : SPK.entity(CAVES[mapId][2]);
+    const seen = new Set([`${start.tx},${start.ty}`]); const q = [[start.tx, start.ty]];
+    const ctx = { broken: m.entities.filter((e) => e.kind === 'B').map((e) => e.id), powers: { bubble: true } };
+    while (q.length) {
+      const [x, y] = q.pop();
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const k = `${x + dx},${y + dy}`;
+        if (seen.has(k) || SPK.isSolid(m, x + dx, y + dy, ctx)) continue;
+        seen.add(k); q.push([x + dx, y + dy]);
+      }
+    }
+    const e = SPK.entity(id);
+    assert.ok(seen.has(`${e.tx},${e.ty}`), `${id} reachable with Bubble Hooves`);
+  }
+});
+
+test('each pedestal grants its power once', () => {
+  assert.deepEqual(Object.values(SPK.PEDESTALS).map((p) => p.power).sort(), ['bubble', 'glow', 'mighty']);
+  for (const id of Object.keys(SPK.PEDESTALS)) assert.equal(SPK.entity(id).kind, 'P', `${id} is a pedestal`);
+  const g = SPK.createGame('easy');
+  const r = SPK.takePedestal(g, 'grotto:P:32,4');
+  assert.ok(r && r.item && r.picture.length && r.text);
+  assert.equal(g.powers.glow, true);
+  assert.equal(SPK.takePedestal(g, 'grotto:P:32,4'), null, 'only once');
+  assert.equal(SPK.takePedestal(g, 'pebble:P:27,11').power, 'mighty');
+});
+
+test('light: grotto is dim, bubble cavern is dark, Glow Horn lights both; outside is lit', () => {
+  const g = SPK.createGame('easy');
+  assert.equal(SPK.lightRadius(g, SPK.parseMap('meadow')), null);
+  assert.equal(SPK.lightRadius(g, SPK.parseMap('pebble')), null);
+  assert.equal(SPK.lightRadius(g, SPK.parseMap('grotto')), 4.5);
+  assert.equal(SPK.lightRadius(g, SPK.parseMap('bubble')), 2.2);
+  g.powers.glow = true;
+  assert.equal(SPK.lightRadius(g, SPK.parseMap('grotto')), 7);
+  assert.equal(SPK.lightRadius(g, SPK.parseMap('bubble')), 7);
+});
+
+test('a save on water with bubble hooves keeps its spot', () => {
+  const g = SPK.createGame('normal');
+  g.powers.mighty = g.powers.bubble = true;
+  g.map = 'woods'; g.x = 22.5 * SPK.TILE; g.y = 22.5 * SPK.TILE; g.mode = 'play';
+  const s = SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g))));
+  assert.deepEqual([s.map, s.x, s.y], ['woods', 22, 22]);
+});
+
+test('cave bats: one hit, quick dives', () => {
+  const b = SPK.ENEMIES.bat;
+  assert.equal(b.hp, 1);
+  assert.ok(b.dive && b.dive.every > 1.5 && b.dive.dur < 1);
+});
