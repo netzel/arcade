@@ -104,7 +104,7 @@
       'TT..........:....,.........,.........,........B>',
       'T..TT.......:.....S........T..........TT......TT',
       'T..,.,......:..,.................,..........C.TT',
-      'TT..........:.....,......,......,.............TT',
+      'TT........W.:.....,......,......,.............TT',
       'T...........F.....,.........C......~~~........TT',
       'TT.........,:...,..........,,...~~~~~~~~~......T',
       'TT,.........@..................~~~~~~~~~~~....TT',
@@ -922,9 +922,56 @@
     g.hpMax = SPK.hpMaxFor(g); g.hp = Math.min(s.hp, g.hpMax);
     g.explored = {};
     for (var id in s.explored) { var m = SPK.parseMap(id); g.explored[id] = SPK.decodeBits(s.explored[id], m.w * m.h); }
-    if (s.closet && typeof s.closet === 'object') g.closet = { owned: copyList(s.closet.owned), wearing: s.closet.wearing || {} };
+    if (s.closet && typeof s.closet === 'object') {
+      // Only real items you own can be worn (a hand-edited save loads, just undressed).
+      var owned = copyList(s.closet.owned).filter(function (id) { return !!closetItem(id); });
+      var wear = s.closet.wearing || {}, dress = { color: null, accessory: null };
+      ['color', 'accessory'].forEach(function (k) {
+        var it = closetItem(wear[k]);
+        if (it && it.kind === k && owned.indexOf(it.id) >= 0) dress[k] = it.id;
+      });
+      g.closet = { owned: owned, wearing: dress };
+    }
     g.mode = 'welcome';
     return g;
+  };
+
+  // ── The Unicorn Closet: colors and accessories bought with gems ──────
+  SPK.CLOSET = [
+    { id: 'mint',    kind: 'color',     price: 30 },
+    { id: 'galaxy',  kind: 'color',     price: 60 },
+    { id: 'rainbow', kind: 'color',     price: 100 },
+    { id: 'crown',   kind: 'accessory', price: 25 },  // a flower crown
+    { id: 'cape',    kind: 'accessory', price: 45 },
+    { id: 'horn',    kind: 'accessory', price: 70 },  // a sparkly horn
+  ];
+  function closetItem(id) {
+    for (var i = 0; i < SPK.CLOSET.length; i++) if (SPK.CLOSET[i].id === id) return SPK.CLOSET[i];
+    return null;
+  }
+  // Tapping an item: buy it (and put it on) if you can, else put on / take off.
+  SPK.closetTap = function (state, id) {
+    var it = closetItem(id);
+    if (!it) return null;
+    var c = state.closet;
+    if (c.owned.indexOf(id) >= 0) {
+      if (c.wearing[it.kind] === id) { c.wearing[it.kind] = null; return 'off'; }
+      c.wearing[it.kind] = id;
+      return 'wear';
+    }
+    if (state.gems < it.price) return 'poor';
+    state.gems -= it.price;
+    c.owned.push(id);
+    c.wearing[it.kind] = id;
+    return 'bought';
+  };
+  // Easy/Normal can be switched in the closet; it's saved with the adventure.
+  SPK.setDifficulty = function (state, d) {
+    if (!SPK.DIFF[d]) throw new Error('unknown difficulty: ' + d);
+    var before = state.hpMax;
+    state.difficulty = d;
+    state.hpMax = SPK.hpMaxFor(state);
+    state.hp = Math.max(1, Math.min(state.hpMax, state.hp + Math.max(0, state.hpMax - before)));
   };
 
   // The horn is the close-up, high-risk attack, so it hits much harder than a bolt.
@@ -944,7 +991,7 @@
       x: (start.tx + 0.5) * SPK.TILE, y: (start.ty + 0.5) * SPK.TILE, facing: Math.PI / 2,
       hp: d.hp, hpMax: d.hp, gems: 0, powers: {}, chests: [], friends: [], heartPieces: [],
       campfires: [], wakeCampfire: SPK.HOME_FIRE, bossBeaten: false, broken: [], explored: {},
-      closet: { owned: [], wearing: {} }, fx: {},
+      closet: { owned: [], wearing: { color: null, accessory: null } }, fx: {},
     };
   };
 
@@ -1139,6 +1186,7 @@
     if (state.mode === 'intro') { state.mode = 'play'; introLeft = 0; return; }
     if (state.mode === 'reveal') { if (revealT > 1) { state.mode = 'play'; resetInput('reveal'); } return; }
     if (state.mode === 'mapview') { mapTap(e.clientX, e.clientY); return; }
+    if (state.mode === 'closet') { closetTap(e.clientX, e.clientY); return; }
     if (speaker && Math.hypot(e.clientX - speaker.x, e.clientY - speaker.y) <= speaker.r + 8) { say(speaker.text); return; }
     input.down(e.pointerId, e.clientX, e.clientY, now(), e.pointerType);
   });
@@ -1152,20 +1200,20 @@
   canvas.addEventListener('pointercancel', function (e) { input.cancel(e.pointerId); });
   canvas.addEventListener('lostpointercapture', function (e) { input.cancel(e.pointerId); });
   canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-  window.addEventListener('blur', function () { closeMap(); resetInput('blur'); });
+  window.addEventListener('blur', function () { closeOverlays(); resetInput('blur'); });
   window.addEventListener('pagehide', function () { resetInput('pagehide'); });
   document.addEventListener('visibilitychange', function () { if (document.hidden) resetInput('hidden'); });
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', function () { setTimeout(resize, 150); });
-  if (window.ArcadeBridge && ArcadeBridge.on) ArcadeBridge.on(function (type) { if (type === 'pause') { closeMap(); resetInput('pause'); } });
+  if (window.ArcadeBridge && ArcadeBridge.on) ArcadeBridge.on(function (type) { if (type === 'pause') { closeOverlays(); resetInput('pause'); } });
 
   // ── Keyboard ─────────────────────────────────────────────────────────
   var KEYMAP = { ArrowLeft: 'l', a: 'l', A: 'l', ArrowRight: 'r', d: 'r', D: 'r', ArrowUp: 'u', w: 'u', W: 'u', ArrowDown: 'dn', s: 'dn', S: 'dn' };
   var PRESSKEYS = { ' ': 'horn', j: 'horn', J: 'horn', k: 'magic', K: 'magic', f: 'magic', F: 'magic', m: 'map', M: 'map' };
   window.addEventListener('keydown', function (e) {
     if (e.repeat && PRESSKEYS[e.key] === 'map') { e.preventDefault(); return; } // a held M never flickers the map
-    if (state.mode === 'mapview') {
-      if (e.key === 'Escape' || PRESSKEYS[e.key] === 'map') { e.preventDefault(); closeMap(); }
+    if (state.mode === 'mapview' || state.mode === 'closet') {
+      if (e.key === 'Escape' || PRESSKEYS[e.key] === 'map') { e.preventDefault(); closeOverlays(); }
       return;
     }
     if (KEYMAP[e.key]) { keys[KEYMAP[e.key]] = true; e.preventDefault(); return; }
@@ -1592,14 +1640,118 @@
   }
   function closeMap() {
     if (!mapUI || state.mode !== 'mapview') return;
-    // Power-up timers pause while you look at the map.
-    var shift = now() - mapUI.openedAt;
-    for (var k in SPK.POWERUPS) if (state.fx[k]) state.fx[k].until += shift;
-    if (state.fx.invulnUntil) state.fx.invulnUntil += shift;
+    shiftTimers(now() - mapUI.openedAt); // power-ups pause while you look at the map
     mapUI = null;
     state.mode = 'play';
     resetInput('map');
   }
+  function shiftTimers(ms) {
+    for (var k in SPK.POWERUPS) if (state.fx[k]) state.fx[k].until += ms;
+    if (state.fx.invulnUntil) state.fx.invulnUntil += ms;
+  }
+  function closeOverlays() { closeMap(); closeCloset(); }
+
+  // ── The Unicorn Closet: bump the wardrobe by the home campfire ────────
+  var closetUI = null, closetArmed = true;
+  function openCloset() {
+    closetUI = { hits: [], openedAt: now(), poor: null, flash: null };
+    state.mode = 'closet'; closetArmed = false;
+    resetInput('closet');
+    sfx('chime');
+  }
+  function closeCloset() {
+    if (!closetUI || state.mode !== 'closet') return;
+    shiftTimers(now() - closetUI.openedAt);
+    closetUI = null;
+    state.mode = 'play';
+    resetInput('closet');
+  }
+  function closetButton(x, y, r, icon, act, id, on) {
+    ctx.fillStyle = on ? '#fde68a' : 'rgba(255,255,255,.9)';
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#6d28d9'; ctx.stroke();
+    emoji(icon, x, y + 1, r * 1.05);
+    closetUI.hits.push({ x: x, y: y, r: r, act: act, id: id });
+  }
+  function drawCloset() {
+    var ins = insets(), L = ins.l + 16, T = ins.t + 12, R = W - ins.r - 16, B = H - ins.b - 16, t = now();
+    closetUI.hits = [];
+    ctx.fillStyle = 'rgba(30,12,64,.86)'; ctx.fillRect(0, 0, W, H);
+    closetButton(L + 24, T + 26, 24, '✖️', 'close');
+    // your gems
+    var gs = 26, label = String(state.gems);
+    ctx.font = '700 ' + Math.round(gs * 0.8) + 'px Fredoka, ui-rounded, system-ui, sans-serif';
+    var pw = gs * 1.4 + ctx.measureText(label).width + 16;
+    ctx.fillStyle = 'rgba(255,255,255,.9)'; roundRect(W / 2 - pw / 2, T + 26 - gs * 0.7, pw, gs * 1.4, gs * 0.7); ctx.fill();
+    emoji('💎', W / 2 - pw / 2 + gs * 0.85, T + 27, gs * 0.85);
+    ctx.fillStyle = '#5b21b6'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, W / 2 - pw / 2 + gs * 1.5, T + 28);
+    // Easy / Normal on the right
+    var colX = R - 30;
+    closetButton(colX, (T + B) / 2 - 40, 30, '🐣', 'diff', 'easy', state.difficulty === 'easy');
+    closetButton(colX, (T + B) / 2 + 40, 30, '🦄', 'diff', 'normal', state.difficulty === 'normal');
+    // two rows: colors, then accessories; each cell shows you wearing it
+    var aL = L, aT = T + 62, aR = R - 74, aB = B;
+    var rows = [['plain', 'mint', 'galaxy', 'rainbow'], ['bare', 'crown', 'cape', 'horn']];
+    var cell = Math.min((aR - aL) / 4, (aB - aT) / 2, 140);
+    var ox = (aL + aR) / 2 - cell * 2, oy = (aT + aB) / 2 - cell;
+    var wear = state.closet.wearing;
+    rows.forEach(function (row, ri) {
+      row.forEach(function (id, ci) {
+        var cx = ox + (ci + 0.5) * cell, cy = oy + (ri + 0.45) * cell, rr = cell * 0.36;
+        var it = SPK.CLOSET.filter(function (i) { return i.id === id; })[0];
+        var kind = ri === 0 ? 'color' : 'accessory';
+        var owned = !it || state.closet.owned.indexOf(id) >= 0;
+        var worn = it ? wear[kind] === id : !wear[kind];
+        if (closetUI.poor && closetUI.poor.id === id && t - closetUI.poor.t < 450) cx += Math.sin((t - closetUI.poor.t) / 30) * 5;
+        ctx.fillStyle = worn ? '#fde68a' : owned ? '#fffbeb' : '#d6d3d1';
+        ctx.beginPath(); ctx.arc(cx, cy, rr, 0, 7); ctx.fill();
+        ctx.lineWidth = worn ? 5 : 3; ctx.strokeStyle = worn ? '#f59e0b' : '#6d28d9'; ctx.stroke();
+        if (closetUI.flash && closetUI.flash.id === id && t - closetUI.flash.t < 700) {
+          var k = (t - closetUI.flash.t) / 700;
+          ctx.globalAlpha = 1 - k; ctx.strokeStyle = '#fde047'; ctx.lineWidth = 6;
+          ctx.beginPath(); ctx.arc(cx, cy, rr * (1 + k * 0.6), 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+        }
+        var look = kind === 'color' ? { color: it ? id : null, accessory: wear.accessory } : { color: wear.color, accessory: it ? id : null };
+        ctx.save(); ctx.translate(cx, cy + rr * 0.05);
+        if (!owned) ctx.globalAlpha = 0.75;
+        drawUnicorn(rr * 1.15, look);
+        ctx.restore();
+        if (!owned) { // price tag
+          var cant = state.gems < it.price, ts = Math.max(13, cell * 0.13), tl = String(it.price);
+          ctx.font = '700 ' + Math.round(ts) + 'px Fredoka, ui-rounded, system-ui, sans-serif';
+          var tw = ts * 1.2 + ctx.measureText(tl).width + 12, ty = cy + rr + ts * 0.3;
+          ctx.globalAlpha = cant ? 0.55 : 1;
+          ctx.fillStyle = '#fff'; roundRect(cx - tw / 2, ty - ts * 0.7, tw, ts * 1.4, ts * 0.7); ctx.fill();
+          emoji('💎', cx - tw / 2 + ts * 0.75, ty + 1, ts * 0.9);
+          ctx.fillStyle = '#5b21b6'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          ctx.fillText(tl, cx - tw / 2 + ts * 1.4, ty + 1);
+          ctx.globalAlpha = 1;
+        }
+        closetUI.hits.push({ x: cx, y: cy, r: rr + 6, act: 'item', id: id });
+      });
+    });
+  }
+  function closetTap(x, y) {
+    if (!closetUI || now() - closetUI.openedAt < 350) return; // the second tap of an excited double-tap
+    for (var i = closetUI.hits.length - 1; i >= 0; i--) {
+      var h = closetUI.hits[i];
+      if (Math.hypot(x - h.x, y - h.y) > h.r + 8) continue;
+      if (h.act === 'close') { closeCloset(); sfx('pop'); }
+      else if (h.act === 'diff') { if (state.difficulty !== h.id) { SPK.setDifficulty(state, h.id); sfx('power'); } }
+      else if (h.act === 'item') {
+        var r;
+        if (h.id === 'plain' || h.id === 'bare') { var k = h.id === 'plain' ? 'color' : 'accessory'; r = state.closet.wearing[k] ? 'off' : null; state.closet.wearing[k] = null; }
+        else r = SPK.closetTap(state, h.id);
+        if (r === 'bought') { sfx('fanfare'); closetUI.flash = { id: h.id, t: now() }; }
+        else if (r === 'wear') { sfx('sparkle'); closetUI.flash = { id: h.id, t: now() }; }
+        else if (r === 'off') sfx('pop');
+        else if (r === 'poor') { sfx('bonk'); closetUI.poor = { id: h.id, t: now() }; }
+      }
+      return;
+    }
+  }
+
   function miniFor(mapId) {
     var m = SPK.parseMap(mapId), ex = state.explored[mapId], cv = document.createElement('canvas');
     cv.width = m.w; cv.height = m.h;
@@ -2038,7 +2190,7 @@
       return;
     }
     if (state.mode === 'reveal') { revealT += dt; updatePickups(dt); return; }
-    if (state.mode === 'mapview') return; // the world waits while you look at the map
+    if (state.mode === 'mapview' || state.mode === 'closet') return; // the world waits
     if (state.mode !== 'play') return;
     if (hitPause > 0) { hitPause -= dt; return; }
     shake = Math.max(0, shake - dt);
@@ -2061,6 +2213,10 @@
       if (walkTo && res.hit.length && Math.hypot(res.x - state.x, res.y - state.y) < 0.5 && !(bid && state.powers.mighty) && !gap) walkTo = null;
       state.x = res.x; state.y = res.y;
       state.facing = Math.atan2(v.y, v.x);
+      var atW = false;
+      for (var wi = 0; wi < res.hit.length; wi++) if (res.hit[wi].code === 'W') atW = true;
+      if (atW && closetArmed) { openCloset(); return; }
+      if (!atW) closetArmed = true;
       if (bid && state.powers.mighty && Math.random() < 0.3) burst(state.x + Math.cos(state.facing) * TILE * 0.5, state.y + Math.sin(state.facing) * TILE * 0.5, 1, ['#9ca3af', '#d1d5db'], 30);
       if (SPK.bonkTick(state, bid, dt)) breakBoulder(bid);
       if (SPK.hopTick(state, gap && gap.key, dt)) startHop(gap.land);
@@ -2317,6 +2473,14 @@
           ctx.fillStyle = '#fff'; ctx.fillRect(x + 9, y - 14 - tw * 3, 2, 6); ctx.fillRect(x + 7, y - 12 - tw * 3, 6, 2);
         }
       } else if (e.kind === 'L') drawLandmark(x, y);
+      else if (e.kind === 'W') {
+        ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(x, y + 12, 15, 4, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#b45309'; roundRect(x - 14, y - 26, 28, 38, 5); ctx.fill();
+        ctx.strokeStyle = '#78350f'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#f472b6'; ctx.fillRect(x - 11, y - 22, 10, 30); ctx.fillStyle = '#c084fc'; ctx.fillRect(x + 1, y - 22, 10, 30);
+        ctx.fillStyle = '#fde047'; ctx.beginPath(); ctx.arc(x - 3, y - 6, 1.8, 0, 7); ctx.arc(x + 3, y - 6, 1.8, 0, 7); ctx.fill();
+        emoji('👗', x, y - 36 + Math.sin(clock * 2) * 2, TILE * 0.55);
+      }
     }
   }
 
@@ -2365,8 +2529,60 @@
     if (Math.cos(state.facing) > 0.1) ctx.scale(-1, 1); // the emoji faces left
     if (horn.dash) { ctx.rotate(-0.25); ctx.scale(1.15, 0.9); }
     else if (moving) ctx.translate(0, -Math.abs(Math.sin(clock * 12)) * 3);
-    emoji('🦄', 0, 0, TILE * 1.1);
+    drawUnicorn(TILE * 1.1, state.closet && state.closet.wearing);
     ctx.restore();
+  }
+
+  // The unicorn in her closet look, centred on 0,0 and facing left (like the emoji).
+  var lookCache = {}, LOOK_TINT = { mint: 'rgba(52,211,153,.55)', galaxy: 'rgba(67,56,202,.62)' };
+  function unicornSprite(color) {
+    if (lookCache[color]) return lookCache[color];
+    var cv = document.createElement('canvas'); cv.width = cv.height = 96;
+    var c = cv.getContext('2d');
+    c.font = '80px serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('🦄', 48, 48);
+    c.globalCompositeOperation = 'source-atop';
+    if (color === 'rainbow') {
+      var gr = c.createLinearGradient(0, 10, 96, 86);
+      RAINBOW.forEach(function (col, i) { gr.addColorStop(i / (RAINBOW.length - 1), col); });
+      c.globalAlpha = 0.55; c.fillStyle = gr;
+    } else c.fillStyle = LOOK_TINT[color];
+    c.fillRect(0, 0, 96, 96);
+    if (color === 'galaxy') {
+      c.globalAlpha = 1; c.fillStyle = '#fff';
+      for (var i = 0; i < 16; i++) { var sx = 6 + hash(i, 7) * 84, sy = 6 + hash(7, i) * 84, sr = i % 4 ? 1.2 : 2.2; c.fillRect(sx - sr / 2, sy - sr / 2, sr, sr); }
+    }
+    lookCache[color] = cv;
+    return cv;
+  }
+  function drawUnicorn(s, look) {
+    var color = look && look.color, acc = look && look.accessory;
+    if (acc === 'cape') {
+      var wave = Math.sin(clock * 5) * s * 0.05;
+      ctx.fillStyle = '#a21caf';
+      ctx.beginPath(); ctx.moveTo(s * 0.02, s * 0.12); ctx.quadraticCurveTo(s * 0.5, s * 0.02 + wave, s * 0.58, s * 0.48);
+      ctx.lineTo(s * 0.12, s * 0.46); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#fde047'; ctx.lineWidth = Math.max(1, s * 0.04); ctx.stroke();
+    }
+    if (color === 'rainbow' || LOOK_TINT[color]) ctx.drawImage(unicornSprite(color), -s * 0.6, -s * 0.6, s * 1.2, s * 1.2);
+    else emoji('🦄', 0, 0, s);
+    if (acc === 'crown') {
+      var fc = ['#f472b6', '#fde047', '#ffffff', '#c084fc', '#fb7185'];
+      for (var i = 0; i < 5; i++) {
+        var fx = -s * 0.2 + i * s * 0.11, fy = -s * 0.36 + Math.abs(i - 2) * s * 0.035;
+        ctx.fillStyle = fc[i]; ctx.beginPath(); ctx.arc(fx, fy, s * 0.075, 0, 7); ctx.fill();
+        ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(fx, fy, s * 0.03, 0, 7); ctx.fill();
+      }
+    } else if (acc === 'horn') {
+      var hx = -s * 0.28, hy = -s * 0.42;
+      ctx.fillStyle = 'rgba(253,224,71,' + (0.35 + 0.15 * Math.sin(clock * 4)) + ')';
+      ctx.beginPath(); ctx.arc(hx, hy, s * 0.2, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff';
+      for (var j = 0; j < 3; j++) {
+        var a = clock * 1.6 + j * 2.1, d = s * 0.22, tx = hx + Math.cos(a) * d, ty = hy + Math.sin(a) * d * 0.7, z = s * (0.05 + 0.03 * Math.sin(clock * 3 + j));
+        ctx.fillRect(tx - z, ty - z * 0.25, z * 2, z * 0.5); ctx.fillRect(tx - z * 0.25, ty - z, z * 0.5, z * 2);
+      }
+    }
   }
 
   var SLIME_COLORS = [['#4ade80', '#16a34a'], ['#f472b6', '#db2777'], ['#60a5fa', '#2563eb']];
@@ -2563,6 +2779,7 @@
     if (state.mode === 'sleepy') drawSleepy();
     if (state.mode === 'reveal') drawReveal();
     if (state.mode === 'mapview') drawMapView();
+    if (state.mode === 'closet') drawCloset();
     if (fade) {
       ctx.fillStyle = 'rgba(15,10,30,' + Math.max(0, 1 - Math.abs(fade.t / fade.dur * 2 - 1)) + ')';
       ctx.fillRect(0, 0, W, H);
@@ -2596,6 +2813,7 @@
     _teleport: function (mapId, tx, ty) { teleport(mapId, tx, ty); },
     _spawn: function (kind, tx, ty) { spawnEnemy(kind, (tx + 0.5) * TILE, (ty + 0.5) * TILE, null); },
     _clearEnemies: function () { enemies = []; spores = []; },
+    closetHits: function () { return closetUI ? closetUI.hits.map(function (h) { return { x: h.x, y: h.y, r: h.r, act: h.act, id: h.id || null }; }) : []; },
     mapHits: function () { return mapUI ? mapUI.hits.map(function (h) { return { x: h.x, y: h.y, r: h.r, act: h.act, id: h.id || null }; }) : []; },
     _give: function (kind) { if (SPK.POWERUPS[kind]) SPK.grantPowerup(state, kind, now()); else state.powers[kind] = true; },
     get enemies() { return enemies.length; },

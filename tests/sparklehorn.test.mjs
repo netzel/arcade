@@ -1189,3 +1189,67 @@ test('ten star friends and ten heart pieces exist so far', () => {
   hearts += Object.values(SPK.CHESTS).filter((c) => c.heartPiece).length;
   assert.equal(hearts, 10);
 });
+
+// ── Slice 3, Task 4: the Unicorn Closet ─────────────────────────────────
+test('the closet sells three colors and three accessories at the planned prices', () => {
+  const p = Object.fromEntries(SPK.CLOSET.map((i) => [i.id, [i.kind, i.price]]));
+  assert.deepEqual(p, {
+    mint: ['color', 30], galaxy: ['color', 60], rainbow: ['color', 100],
+    crown: ['accessory', 25], cape: ['accessory', 45], horn: ['accessory', 70],
+  });
+  const m = SPK.parseMap('meadow');
+  assert.equal(SPK.entity('meadow:W:10,17').kind, 'W', 'the wardrobe stands by the home campfire');
+  assert.equal(SPK.isSolid(m, 10, 17, null), true, 'you bump into it to open it');
+});
+
+test('closetTap buys when you have the gems, then wears and takes off', () => {
+  const g = SPK.createGame('easy');
+  g.gems = 40;
+  assert.equal(SPK.closetTap(g, 'galaxy'), 'poor');
+  assert.equal(g.gems, 40, 'nothing spent');
+  assert.equal(SPK.closetTap(g, 'mint'), 'bought');
+  assert.equal(g.gems, 10);
+  assert.deepEqual([...g.closet.owned], ['mint']);
+  assert.equal(g.closet.wearing.color, 'mint', 'you wear it right away');
+  assert.equal(SPK.closetTap(g, 'mint'), 'off');
+  assert.equal(g.closet.wearing.color, null);
+  assert.equal(SPK.closetTap(g, 'mint'), 'wear');
+  assert.equal(g.gems, 10, 'wearing what you own is free');
+  g.gems = 100;
+  SPK.closetTap(g, 'crown'); SPK.closetTap(g, 'cape');
+  assert.equal(g.closet.wearing.accessory, 'cape', 'one accessory at a time');
+  assert.equal(g.closet.wearing.color, 'mint', 'colors and accessories are separate');
+  assert.equal(SPK.closetTap(g, 'nope'), null);
+});
+
+test('switching difficulty in the closet keeps hearts sensible', () => {
+  const g = SPK.createGame('normal');
+  g.hp = 5;
+  SPK.setDifficulty(g, 'easy');
+  assert.equal(g.difficulty, 'easy');
+  assert.equal(g.hpMax, 12);
+  assert.equal(g.hp, 9, 'the extra hearts arrive full');
+  SPK.setDifficulty(g, 'normal');
+  assert.equal(g.hpMax, 8);
+  assert.equal(g.hp, 8, 'never above the max');
+  g.hp = 1; SPK.setDifficulty(g, 'normal');
+  assert.ok(g.hp >= 1);
+  assert.throws(() => SPK.setDifficulty(g, 'hard'));
+  const back = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave({ ...g, mode: 'play' })))));
+  assert.equal(back.difficulty, 'normal', 'saved with the adventure');
+});
+
+test('a closet in a save loads back; wearing something you do not own is taken off', () => {
+  const g = SPK.createGame('easy');
+  g.gems = 200; SPK.closetTap(g, 'rainbow'); SPK.closetTap(g, 'horn'); g.mode = 'play';
+  const back = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g)))));
+  assert.deepEqual([...back.closet.owned], ['rainbow', 'horn']);
+  assert.equal(back.closet.wearing.color, 'rainbow');
+  assert.equal(back.closet.wearing.accessory, 'horn');
+  const s = JSON.parse(JSON.stringify(SPK.getSave(g)));
+  s.closet = { owned: ['mint', 'unicornium'], wearing: { color: 'galaxy', accessory: 'crown' } };
+  const odd = SPK.applySave(SPK.validateSave(s));
+  assert.deepEqual([...odd.closet.owned], ['mint']);
+  assert.equal(odd.closet.wearing.color, null);
+  assert.equal(odd.closet.wearing.accessory, null);
+});
