@@ -1111,3 +1111,36 @@ test('a lake or cloud save loads back where you were, even standing on a lily pa
   const back = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g)))));
   assert.equal(back.map, 'lake'); assert.equal(back.x, 14.5 * 32);
 });
+
+// ── Slice 3, Task 2: Windy Hills, bees, Double Sparkle ──────────────────
+test('windy hills: the bottom is open, every plateau above needs Cloud Hop', () => {
+  const m = SPK.parseMap('hills');
+  assert.equal(m.w, 50); assert.equal(m.h, 34);
+  assert.deepEqual({ ...SPK.doorArrival('hills:>:25,33') }, { map: 'hills', tx: 25, ty: 32 });
+  assert.deepEqual({ ...SPK.doorArrival('lake:>:26,0') }, { map: 'lake', tx: 26, ty: 1 });
+  const LOWER = ['hills:>:25,33', 'hills:F:22,28', 'hills:C:40,30', 'hills:C:6,31'];
+  const walk = reach('hills', 25, 32, { bubble: true }), hop = reach('hills', 25, 32, { bubble: true, hop: true });
+  for (const id of keyThings('hills')) {
+    if (LOWER.includes(id)) assert.ok(walk(id), `${id} reachable on foot`);
+    else assert.ok(!walk(id) && hop(id), `${id} needs Cloud Hop`);
+  }
+  assert.equal(SPK.CHESTS['hills:C:31,3'].upgrade, 'doubleSparkle', 'Double Sparkle waits on the top plateau');
+});
+
+test('buzzy bees swoop with a wind-up before diving (2 hits)', () => {
+  const b = SPK.ENEMIES.bee;
+  assert.equal(b.hp, 2);
+  assert.ok(b.dive.windup >= 0.5);
+});
+
+test('double sparkle fires two bolts, and seven with star burst', () => {
+  const g = SPK.createGame('easy');
+  assert.equal(SPK.fireMagic(g, 0, 0).length, 1);
+  SPK.openChest(g, 'hills:C:31,3');
+  assert.equal(g.powers.doubleSparkle, true);
+  const two = [...SPK.fireMagic(g, 0, 0)];
+  assert.equal(two.length, 2);
+  assert.ok(Math.abs(two[0] + two[1]) < 1e-9 && Math.abs(two[0]) > 0.05, 'side by side around the aim');
+  SPK.grantPowerup(g, 'starBurst', 0);
+  assert.equal(SPK.fireMagic(g, 0, 1).length, 7);
+});

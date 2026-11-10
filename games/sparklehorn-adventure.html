@@ -644,8 +644,11 @@
   SPK.magnetRange = function (state, nowMs) { return SPK.hasPowerup(state, 'magnet', nowMs) ? 9 : 1.4; };
   SPK.boltDamage = function (state) { return state.powers.bigSparkle ? 2 : 1; };
   // Angles of the bolts one Magic press fires.
+  // Double Sparkle: two bolts side by side (7 in a wider fan with Star Burst).
   SPK.fireMagic = function (state, aim, nowMs) {
-    return SPK.fanAngles(aim, SPK.hasPowerup(state, 'starBurst', nowMs) ? 5 : 1, 50);
+    var burst = SPK.hasPowerup(state, 'starBurst', nowMs), dbl = !!state.powers.doubleSparkle;
+    if (burst) return SPK.fanAngles(aim, dbl ? 7 : 5, dbl ? 64 : 50);
+    return SPK.fanAngles(aim, dbl ? 2 : 1, 12);
   };
 
   // ── Chests, heart pieces ─────────────────────────────────────────────
@@ -1382,7 +1385,7 @@
     var angles = SPK.fireMagic(state, aimAngle(), now());
     angles.forEach(function (a, i) {
       bolts.push({ x: state.x + Math.cos(a) * 10, y: state.y + Math.sin(a) * 10, vx: Math.cos(a) * 9 * TILE, vy: Math.sin(a) * 9 * TILE, life: 0.9, dmg: SPK.boltDamage(state),
-                   color: angles.length > 1 ? RAINBOW[i % RAINBOW.length] : null });
+                   color: angles.length > 2 ? RAINBOW[i % RAINBOW.length] : null });
     });
     stats.bolts++;
     sfx('sparkle');
@@ -1545,6 +1548,7 @@
         if (c.powerup) dropPickup(c.powerup, x, y);
         if (c.heartPiece) heartPieceFx(x, y);
         if (c.upgrade === 'bigSparkle') showReveal({ item: '✨', picture: ['🦄', '✨', '➡️', '💥'], text: 'Big Sparkle! Bigger, stronger magic!' });
+        if (c.upgrade === 'doubleSparkle') showReveal({ item: '✨', picture: ['🦄', '✨', '✨', '➡️'], text: 'Double Sparkle! Two magic stars at once!' });
       } else if (e.kind === '*') {
         var fr = SPK.meetFriend(state, e.id);
         if (fr) { showReveal({ item: fr.emoji, picture: ['🦄', '❤️', fr.emoji, '🏠'], text: fr.name + ' is your friend!' }); onDiscovery(); }
@@ -2314,6 +2318,19 @@
       emoji('💎', x, y - TILE * 0.6, TILE * 2);
       ctx.fillStyle = '#fff'; var tw = 0.5 + 0.5 * Math.sin(clock * 2.4);
       ctx.fillRect(x + 14, y - TILE * 1.4 - tw * 3, 2, 8); ctx.fillRect(x + 11, y - TILE * 1.4 + 3 - tw * 3, 8, 2);
+    } else if (map.theme === 'hills') { // the windmill, turning in the wind
+      ctx.fillStyle = '#fef3c7'; ctx.strokeStyle = '#92400e'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x - 13, y + 14); ctx.lineTo(x - 8, y - 40); ctx.lineTo(x + 8, y - 40); ctx.lineTo(x + 13, y + 14); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#b91c1c'; ctx.beginPath(); ctx.moveTo(x - 11, y - 38); ctx.lineTo(x, y - 52); ctx.lineTo(x + 11, y - 38); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#78350f'; ctx.fillRect(x - 4, y + 2, 8, 12);
+      ctx.save(); ctx.translate(x, y - 34); ctx.rotate(clock * 1.2);
+      for (var i = 0; i < 4; i++) {
+        ctx.rotate(Math.PI / 2);
+        ctx.fillStyle = i % 2 ? '#fde68a' : '#f9a8d4'; ctx.strokeStyle = '#92400e'; ctx.lineWidth = 1.5;
+        ctx.fillRect(2, -4, 30, 8); ctx.strokeRect(2, -4, 30, 8);
+      }
+      ctx.fillStyle = '#92400e'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, 7); ctx.fill();
+      ctx.restore();
     } else emoji('🍄', x, y - TILE * 0.55, TILE * 2.2);
   }
 
