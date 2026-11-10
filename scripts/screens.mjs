@@ -769,6 +769,51 @@ async function sparklehornPass(browser, vp) {
   await t.shot('25-sparkle-dark-cave');
   await quiet();
 
+  // Slice 3: walk east out of the woods to Crystal Lake
+  const walkTo = async (tx, ty, key) => {
+    if (vp.mobile) { const p = await toScreen(tx, ty); await tap(p.x, p.y); await page.waitForTimeout(1800); }
+    else { await page.keyboard.down(key); await page.waitForTimeout(1300); await page.keyboard.up(key); await page.waitForTimeout(300); }
+  };
+  await page.evaluate(() => { const s = window.__spk; s._give('bubble'); s._clearEnemies(); s._teleport('woods', 52, 14); });
+  await page.waitForTimeout(400);
+  if (vp.mobile) { const ex = await toScreen(55, 14); await tap(ex.x, ex.y); } else await page.keyboard.down('ArrowRight');
+  await page.waitForFunction(() => window.__spk.state.map === 'lake', null, { timeout: 5000 }).catch(() => {});
+  if (!vp.mobile) await page.keyboard.up('ArrowRight');
+  await page.waitForTimeout(500);
+  w = await spk();
+  check(w.map === 'lake' && w.mode === 'play', `sparkle: the woods path leads east to Crystal Lake (${w.map})`);
+  await t.shot('26-sparkle-lake');
+
+  // Cloud Hop: walking (or tapping) across a cloud gap hops it
+  await page.evaluate(() => { const s = window.__spk; s._give('hop'); s._clearEnemies(); s._teleport('cloud', 21, 12); });
+  await page.waitForTimeout(400);
+  await walkTo(24, 12, 'ArrowRight'); // tap right on the gap: hop over once, and stay
+  const hopTx = await page.evaluate(() => Math.floor(window.__spk.state.x / 32));
+  check(hopTx >= 26, `sparkle: Cloud Hop hops over the cloud gap and stays over (tile ${hopTx})`);
+  const f0 = await spk();
+  await page.evaluate(() => { window.__spk._clearEnemies(); window.__spk._teleport('hills', 26, 6); });
+  await page.waitForTimeout(800);
+  const f1 = await spk();
+  check(f1.map === 'hills' && f1.frames > f0.frames + 3 && f1.errors === f0.errors, `sparkle: Windy Hills draws with no errors (${f1.frames - f0.frames} frames)`);
+  await t.shot('27-sparkle-hills');
+
+  // The Closet: bump the wardrobe by the home campfire, buy a color, close
+  await page.evaluate(() => { const s = window.__spk; s._clearEnemies(); s._teleport('meadow', 11, 17); s.state.gems = 30; });
+  await page.waitForTimeout(400);
+  await walkTo(10, 17, 'ArrowLeft');
+  check((await spk()).mode === 'closet', 'sparkle: walking into the wardrobe opens the closet');
+  await page.waitForTimeout(400);
+  const mint = (await page.evaluate(() => window.__spk.closetHits())).find((h) => h.id === 'mint');
+  if (mint) { await tap(mint.x, mint.y); await page.waitForTimeout(250); }
+  const dressed = await page.evaluate(() => ({ gems: window.__spk.state.gems, color: window.__spk.state.closet.wearing.color }));
+  check(dressed.gems === 0 && dressed.color === 'mint', `sparkle: tapping Mint buys and wears it (${JSON.stringify(dressed)})`);
+  await t.shot('28-sparkle-closet');
+  const shut = (await page.evaluate(() => window.__spk.closetHits())).find((h) => h.act === 'close');
+  await tap(shut.x, shut.y); await page.waitForTimeout(250);
+  w = await spk();
+  check(w.mode === 'play' && w.inputs.active === 0, `sparkle: ✖ closes the closet with nothing held (${w.mode}, ${w.inputs.active})`);
+  await quiet();
+
   // 7. Rotation mid-play (phones and iPads)
   if (vp.mobile) {
     await page.setViewportSize({ width: vp.height, height: vp.width });

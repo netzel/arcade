@@ -1559,7 +1559,8 @@
   }
   function startHop(land) {
     hop = { x0: state.x, y0: state.y, x1: (land.tx + 0.5) * TILE, y1: (land.ty + 0.5) * TILE, t: 0 };
-    hop.dur = 0.35 + 0.08 * Math.hypot(hop.x1 - hop.x0, hop.y1 - hop.y0) / TILE;
+    var len = Math.hypot(hop.x1 - hop.x0, hop.y1 - hop.y0) || 1;
+    hop.dur = 0.35 + 0.08 * len / TILE; hop.ux = (hop.x1 - hop.x0) / len; hop.uy = (hop.y1 - hop.y0) / len;
     state.fx.lean = null;
     burst(state.x, state.y + 10, 10, ['#ffffff', '#e0f2fe', '#bae6fd'], 70);
     sfx('hop');
@@ -1568,7 +1569,12 @@
     hop.t += dt;
     var k = Math.min(1, hop.t / hop.dur);
     state.x = hop.x0 + (hop.x1 - hop.x0) * k; state.y = hop.y0 + (hop.y1 - hop.y0) * k;
-    if (k >= 1) { burst(state.x, state.y + 10, 12, ['#ffffff', '#e0f2fe', '#bae6fd'], 80); hop = null; sfx('bonk'); }
+    if (k >= 1) {
+      burst(state.x, state.y + 10, 12, ['#ffffff', '#e0f2fe', '#bae6fd'], 80); sfx('bonk');
+      // A tap on the gap itself (or behind you) is done once you've hopped: never hop back and forth.
+      if (walkTo && (walkTo.x - state.x) * hop.ux + (walkTo.y - state.y) * hop.uy < TILE * 0.5) walkTo = null;
+      hop = null;
+    }
   }
   function hopLift() { return hop ? Math.sin(Math.min(1, hop.t / hop.dur) * Math.PI) * TILE * 0.9 : 0; }
 
