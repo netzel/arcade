@@ -1001,3 +1001,13 @@ test('a trail you turned on stays on through discoveries', () => {
   SPK.hintDiscovery(h, 20);
   assert.equal(SPK.hintVisible(h, SPK.DIFF.normal, 30), true);
 });
+
+// ── Slice 2 final review fixes ─────────────────────────────────────────
+test('once the way to the woods is open, the trail no longer drags you back to the optional secret rock', () => {
+  const g = SPK.createGame('easy');
+  g.powers.mighty = true;
+  g.broken.push('meadow:B:46,14', 'woods:B:30,5');
+  g.map = 'grotto';
+  assert.equal(SPK.stage(g).key, 'glow');
+  assert.equal(tileOf(SPK.nextGoal(g)), 'grotto:32,4');
+});

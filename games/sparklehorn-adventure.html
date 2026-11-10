@@ -621,7 +621,8 @@
   SPK.stage = function (state) {
     var broke = function (id) { return state.broken.indexOf(id) >= 0; };
     if (!state.powers.mighty) return { key: 'mighty', at: 'pebble:P:27,11' };
-    if (!broke(SPK.BOULDER)) return { key: 'secret', at: SPK.BOULDER };
+    // The secret chest is optional: once the way east is open, don't drag you back to it.
+    if (!broke(SPK.BOULDER) && !broke(SPK.EAST_BOULDER)) return { key: 'secret', at: SPK.BOULDER };
     if (!broke(SPK.EAST_BOULDER)) return { key: 'east', at: SPK.EAST_BOULDER };
     if (!state.powers.glow) return { key: 'glow', at: broke(SPK.GROTTO_BOULDER) ? 'grotto:P:32,4' : SPK.GROTTO_BOULDER };
     if (!state.powers.bubble) return { key: 'bubble', at: 'bubble:P:3,3' };
@@ -1004,6 +1005,7 @@
   var KEYMAP = { ArrowLeft: 'l', a: 'l', A: 'l', ArrowRight: 'r', d: 'r', D: 'r', ArrowUp: 'u', w: 'u', W: 'u', ArrowDown: 'dn', s: 'dn', S: 'dn' };
   var PRESSKEYS = { ' ': 'horn', j: 'horn', J: 'horn', k: 'magic', K: 'magic', f: 'magic', F: 'magic', m: 'map', M: 'map' };
   window.addEventListener('keydown', function (e) {
+    if (e.repeat && PRESSKEYS[e.key] === 'map') { e.preventDefault(); return; } // a held M never flickers the map
     if (state.mode === 'mapview') {
       if (e.key === 'Escape' || PRESSKEYS[e.key] === 'map') { e.preventDefault(); closeMap(); }
       return;
@@ -1461,7 +1463,7 @@
     SPK.mapMarks(state, m.id).forEach(function (k) {
       var p = at(k);
       if (k.kind === 'fire') {
-        if (k.lit) {
+        if (k.lit && p.y > aT) {
           ctx.fillStyle = 'rgba(253,186,116,' + (0.45 + 0.2 * Math.sin(clock * 4)) + ')';
           ctx.beginPath(); ctx.arc(p.x, p.y, icon * 0.95, 0, 7); ctx.fill();
           mapUI.hits.push({ x: p.x, y: p.y, r: Math.max(24, icon), act: 'travel', id: k.id });
@@ -1494,6 +1496,7 @@
   }
   function mapTap(x, y) {
     if (!mapUI) return;
+    if (now() - mapUI.openedAt < 350) return; // the second tap of a double-tap on the map button
     for (var i = mapUI.hits.length - 1; i >= 0; i--) {
       var h = mapUI.hits[i];
       if (Math.hypot(x - h.x, y - h.y) > h.r + 8) continue;

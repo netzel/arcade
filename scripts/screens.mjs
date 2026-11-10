@@ -719,8 +719,10 @@ async function sparklehornPass(browser, vp) {
   // The map screen: open with 🗺️, travel home by tapping a lit campfire
   const LM = await layout();
   await tap(LM.map.x, LM.map.y);
-  await page.waitForTimeout(300);
-  check((await spk()).mode === 'mapview', 'sparkle: 🗺️ opens the map screen');
+  await page.waitForTimeout(60);
+  await tap(LM.map.x, LM.map.y); // an excited double-tap must not close it or hit ✨
+  await page.waitForTimeout(500);
+  check((await spk()).mode === 'mapview' && !(await page.evaluate(() => window.__spk.hint)), 'sparkle: 🗺️ opens the map screen (a double-tap keeps it open)');
   await t.shot('24-sparkle-map');
   let hits = await page.evaluate(() => window.__spk.mapHits());
   const meadowTab = hits.find((h) => h.act === 'tab' && h.id === 'meadow');
@@ -734,7 +736,7 @@ async function sparklehornPass(browser, vp) {
   // ✖ closes the map and walking still works
   await quiet();
   await tap(LM.map.x, LM.map.y);
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(500);
   const close = (await page.evaluate(() => window.__spk.mapHits())).find((h) => h.act === 'close');
   await tap(close.x, close.y);
   await page.waitForTimeout(200);
@@ -747,7 +749,7 @@ async function sparklehornPass(browser, vp) {
 
   // ✨ on the map turns the hint trail on, and a second tap turns it off
   const hintTap = async () => {
-    await tap(LM.map.x, LM.map.y); await page.waitForTimeout(300);
+    await tap(LM.map.x, LM.map.y); await page.waitForTimeout(500);
     const h = (await page.evaluate(() => window.__spk.mapHits())).find((x) => x.act === 'trail');
     await tap(h.x, h.y); await page.waitForTimeout(200);
     return page.evaluate(() => [window.__spk.hint, window.__spk.state.mode]);
