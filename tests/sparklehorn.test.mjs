@@ -137,14 +137,43 @@ test('cancel and resetAll clear everything', () => {
   assert.equal(inp.lastReset, 'blur');
 });
 
-test('watchdog releases a silent pointer', () => {
+test('a finger held perfectly still stays held while it is still on the screen', () => {
+  const L = LAND();
+  const inp = SPK.createInput(L);
+  inp.down(1, L.magic.x, L.magic.y, 0, 'touch');
+  inp.tick(10000, 1); // 10 s later, no move events, one finger still touching
+  assert.equal(inp.held('magic'), true);
+  assert.equal(inp.active(), 1);
+});
+
+test('watchdog releases touch fingers the screen says are gone', () => {
   const L = LAND();
   const inp = SPK.createInput(L);
   const p = joyPoint(L);
-  inp.down(1, p.x, p.y, 0);
-  inp.tick(2999);
+  inp.down(1, p.x, p.y, 0, 'touch');
+  inp.down(2, L.magic.x, L.magic.y, 100, 'touch');
+  inp.tick(5000, 1); // iOS lost one pointerup: only one finger is really down
   assert.equal(inp.active(), 1);
-  inp.tick(3001);
+  assert.equal(inp.lastReset, 'watchdog');
+  inp.tick(5100, 0); // and now none
+  assert.equal(inp.active(), 0);
+});
+
+test('watchdog never drops a brand-new touch before the screen reports it', () => {
+  const L = LAND();
+  const inp = SPK.createInput(L);
+  inp.down(1, L.magic.x, L.magic.y, 1000, 'touch');
+  inp.tick(1100, 0);
+  assert.equal(inp.active(), 1);
+});
+
+test('mouse buttons held still are kept; a silent pointer with no touch info times out after 30s', () => {
+  const L = LAND();
+  const inp = SPK.createInput(L);
+  inp.down(1, L.magic.x, L.magic.y, 0, 'mouse');
+  inp.tick(10000, 0); // a touch laptop reporting 0 touches must not drop the mouse
+  assert.equal(inp.held('magic'), true);
+  inp.tick(30001, 0);
   assert.equal(inp.active(), 0);
   assert.equal(inp.lastReset, 'watchdog');
 });
@@ -575,11 +604,22 @@ const bad = (mut) => { const s = JSON.parse(JSON.stringify(SPK.getSave(playedGam
 test('validateSave rejects a wrong version', () => {
   assert.throws(() => SPK.validateSave(bad((s) => { s.v = 2; })), /bad save: v/);
 });
-test('validateSave rejects an unknown map', () => {
-  assert.throws(() => SPK.validateSave(bad((s) => { s.map = 'moon'; })), /bad save: map/);
+test('a save from an older map layout still loads: you wake at your campfire', () => {
+  // the map changed under the save: the spot is now a wall, or the map is gone
+  for (const mut of [(s) => { s.x = 0; s.y = 0; }, (s) => { s.map = 'moon'; }]) {
+    const back = SPK.applySave(SPK.validateSave(bad(mut)));
+    const m = SPK.parseMap(back.map);
+    assert.equal(SPK.isSolid(m, Math.floor(back.x / SPK.TILE), Math.floor(back.y / SPK.TILE), { broken: back.broken, powers: back.powers }), false);
+    assert.equal(back.gems, 17, 'progress kept');
+  }
 });
-test('validateSave rejects a position inside a wall', () => {
-  assert.throws(() => SPK.validateSave(bad((s) => { s.x = 0; s.y = 0; })), /bad save: position/);
+test('a save whose campfire no longer exists wakes you at home', () => {
+  const back = SPK.applySave(SPK.validateSave(bad((s) => { s.wakeCampfire = 'meadow:F:99,99'; s.hp = 0 + 5; })));
+  assert.equal(back.wakeCampfire, SPK.HOME_FIRE);
+  assert.equal(back.gems, 17);
+});
+test('validateSave still rejects a map name that is not a string', () => {
+  assert.throws(() => SPK.validateSave(bad((s) => { s.map = 42; })), /bad save: map/);
 });
 test('validateSave rejects non-array chests', () => {
   assert.throws(() => SPK.validateSave(bad((s) => { s.chests = 'all of them'; })), /bad save: chests/);

@@ -2,7 +2,7 @@
 // Picks the player and the game. Each game opens as its own page (see
 // play.js for the in-game menu): no iframe sits between a finger and a game.
 
-import { readSaves, deleteSave, getSlot, readSettings, writeSettings } from './saves.js';
+import { readSaves, deleteSave, getSlot, readSettings, writeSettings, writeSave } from './saves.js';
 import { h, safeStorage, createSheet, createToast, slotRow, setRestore, gameUrl, markFresh } from './ui.js';
 import { timeAgo } from './saves.js';
 
@@ -142,13 +142,7 @@ function gameCard(g, i) {
   const actions = [];
   if (auto) {
     actions.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: primary }, '▶ Continue'));
-    actions.push(h('button', {
-      class: 'btn', type: 'button',
-      onclick: () => sheet.confirm({
-        emoji: '✨', title: 'Start a new game?', message: 'Your other saved games stay safe.',
-        yes: 'Start new', onYes: () => { sheet.close(); playGame(g, 'new'); },
-      }),
-    }, '✨ New'));
+    actions.push(h('button', { class: 'btn', type: 'button', onclick: () => confirmNew(g, saves) }, '✨ New'));
   } else {
     actions.push(h('button', { class: 'btn btn-primary', type: 'button', onclick: primary }, '▶ Play'));
   }
@@ -160,6 +154,25 @@ function gameCard(g, i) {
       h('h2', { class: 'game-title' }, g.title),
       g.tagline ? h('p', { class: 'game-tagline' }, g.tagline) : null,
       h('div', { class: 'game-actions' }, actions)));
+}
+
+// "✨ New". A long adventure (startOver: false) is tucked into a free save
+// slot first, so starting over never quietly throws it away.
+function confirmNew(g, saves) {
+  const long = g.startOver === false && saves.auto;
+  const free = long ? saves.slots.findIndex((sl) => !sl) : -1;
+  const message = !long ? 'Your other saved games stay safe.'
+    : free >= 0 ? `Your adventure so far is kept in Save ${free + 1}.`
+      : 'This replaces your adventure. (All the save slots are full.)';
+  sheet.confirm({
+    emoji: '✨', title: long ? 'Start a new adventure?' : 'Start a new game?', message,
+    yes: 'Start new', danger: long && free < 0,
+    onYes: () => {
+      if (long && free >= 0) writeSave(storage, playerId(), g.id, free, saves.auto);
+      sheet.close();
+      playGame(g, 'new');
+    },
+  });
 }
 
 // ── Saves (from the home screen) ───────────────────────────────────────

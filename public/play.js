@@ -8,7 +8,7 @@
 // its taps are stopped at the shadow host so a game's own tap handlers never
 // see them.
 import { readSaves, writeSave, deleteSave, getSlot, readSettings, writeSettings } from './saves.js';
-import { h, safeStorage, createSheet, tile, createToast, slotLabel, slotRow, setRestore, gameUrl, takeFresh } from './ui.js';
+import { h, safeStorage, createSheet, tile, createToast, slotLabel, slotRow, setRestore, gameUrl, takeFresh, markFresh } from './ui.js';
 
 const CONFIG = window.ARCADE_CONFIG || { siteName: 'Super Games Arcade', players: [], games: [] };
 const GAMES = CONFIG.games || [];
@@ -100,7 +100,10 @@ function start() {
       }
       if (wantedRestore) {
         if (data.restored) toast('Welcome back! 🌟');
-        else if (data.restoreFailed) toast("Couldn't open that save 😕 Starting fresh.");
+        else if (data.restoreFailed) {
+          toast("Couldn't open that save 😕 Starting fresh.");
+          if (longAdventure) markFresh(game.id); // don't retry it on every reload
+        }
         else if (!data.canSave) toast("This game can't load saves yet.");
         wantedRestore = false;
       }

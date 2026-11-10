@@ -476,19 +476,29 @@
   function isInt(n) { return typeof n === 'number' && Math.floor(n) === n; }
   function strList(a) { if (!Array.isArray(a)) return false; for (var i = 0; i < a.length; i++) if (typeof a[i] !== 'string') return false; return true; }
 
+  function knownEntity(id, kind) {
+    var parts = id.split(':');
+    if (parts[1] !== kind || !Object.prototype.hasOwnProperty.call(SPK.MAPS, parts[0])) return false;
+    return !!SPK.entity(id);
+  }
+
   SPK.validateSave = function (s) {
     if (!s || typeof s !== 'object') bad('not an object');
     if (s.v !== 1) bad('v');
     if (!SPK.DIFF[s.difficulty]) bad('difficulty');
-    if (typeof s.map !== 'string' || !Object.prototype.hasOwnProperty.call(SPK.MAPS, s.map)) bad('map');
+    if (typeof s.map !== 'string') bad('map');
     ['chests', 'friends', 'heartPieces', 'campfires', 'broken'].forEach(function (k) { if (!strList(s[k])) bad(k); });
-    var m = SPK.parseMap(s.map);
-    if (!isInt(s.x) || !isInt(s.y) || SPK.isSolid(m, s.x, s.y, { broken: s.broken, powers: s.powers || {} })) bad('position');
+    if (!s.powers || typeof s.powers !== 'object') bad('powers');
+    if (typeof s.wakeCampfire !== 'string') bad('wakeCampfire');
+    // Saves outlive map edits: a campfire that moved, or a spot that became a
+    // wall, repairs to a safe place instead of losing the whole adventure.
+    if (!knownEntity(s.wakeCampfire, 'F')) s.wakeCampfire = SPK.HOME_FIRE;
+    var okSpot = Object.prototype.hasOwnProperty.call(SPK.MAPS, s.map) && isInt(s.x) && isInt(s.y) &&
+      !SPK.isSolid(SPK.parseMap(s.map), s.x, s.y, { broken: s.broken, powers: s.powers });
+    if (!okSpot) { var at = SPK.besideFire(s.wakeCampfire); s.map = at.map; s.x = at.tx; s.y = at.ty; }
     var hpMax = SPK.DIFF[s.difficulty].hp + 2 * Math.floor(s.heartPieces.length / 4);
     if (!isInt(s.hp) || s.hp < 1 || s.hp > hpMax) bad('hp');
     if (!isInt(s.gems) || s.gems < 0) bad('gems');
-    if (!s.powers || typeof s.powers !== 'object') bad('powers');
-    if (typeof s.wakeCampfire !== 'string' || !SPK.MAPS[s.wakeCampfire.split(':')[0]] || !SPK.entity(s.wakeCampfire)) bad('wakeCampfire');
     if (!s.explored || typeof s.explored !== 'object') bad('explored');
     for (var id in s.explored) if (!SPK.MAPS[id] || typeof s.explored[id] !== 'string') bad('explored');
     return s;
@@ -556,7 +566,11 @@
   // Every finger is tracked by pointerId and keeps the role it got on
   // pointerdown until it lifts. Anything that could strand a "held" finger
   // (cancel, blur, rotate, pause, a silent finger) clears state.
-  var JOY_R = 60, DEADZONE = 8, BTN_SLOP = 12, TAP_MS = 250, TAP_PX = 12, WATCHDOG_MS = 3000;
+  var JOY_R = 60, DEADZONE = 8, BTN_SLOP = 12, TAP_MS = 250, TAP_PX = 12;
+  // Watchdog: a finger held perfectly still sends no events, so silence alone
+  // never releases a touch. Touches are checked against how many fingers the
+  // screen says are really down; anything else times out only after 30 s.
+  var NEW_TOUCH_GRACE_MS = 500, SILENT_MS = 30000;
   var BUTTONS = ['magic', 'horn', 'map'];
 
   SPK.createInput = function (layout) {
@@ -570,13 +584,13 @@
     function inRect(z, x, y) { return x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h; }
     function joyOwner() { for (var k in ptrs) if (ptrs[k].role === 'joy') return ptrs[k]; return null; }
 
-    api.down = function (id, x, y, t) {
+    api.down = function (id, x, y, t, type) {
       if (ptrs[id]) api.cancel(id);
       var role = 'none';
       for (var b = 0; b < BUTTONS.length; b++) if (inCircle(L[BUTTONS[b]], x, y)) { role = BUTTONS[b]; break; }
       if (role === 'none' && inRect(L.joyZone, x, y) && !joyOwner()) role = 'joy';
       else if (role === 'none') role = 'tap'; // anywhere else: a quick tap walks you there
-      ptrs[id] = { role: role, x0: x, y0: y, x: x, y: y, t0: t, t: t, maxD: 0 };
+      ptrs[id] = { role: role, x0: x, y0: y, x: x, y: y, t0: t, t: t, maxD: 0, touch: type === 'touch' };
       if (role !== 'none' && role !== 'joy' && role !== 'tap') presses[role] = true;
       return role;
     };
@@ -600,8 +614,23 @@
     };
     api.relayout = function (layout2) { L = layout2; api.resetAll('relayout'); };
     api.layout = function () { return L; };
-    api.tick = function (t) {
-      for (var k in ptrs) if (t - ptrs[k].t > WATCHDOG_MS) { delete ptrs[k]; api.lastReset = 'watchdog'; }
+    // liveTouches: how many fingers the screen reports (TouchEvent.touches), or
+    // null when the device hasn't reported any touches.
+    api.tick = function (t, liveTouches) {
+      var touchIds = [], k;
+      for (k in ptrs) if (ptrs[k].touch) touchIds.push(k);
+      if (typeof liveTouches === 'number' && touchIds.length > liveTouches) {
+        touchIds.sort(function (a, b) { return ptrs[a].t - ptrs[b].t; }); // longest-silent first
+        var extra = touchIds.length - liveTouches;
+        for (var i = 0; i < touchIds.length && extra > 0; i++) {
+          if (t - ptrs[touchIds[i]].t0 < NEW_TOUCH_GRACE_MS) continue;
+          delete ptrs[touchIds[i]]; extra--; api.lastReset = 'watchdog';
+        }
+      }
+      for (k in ptrs) {
+        if (ptrs[k].touch && typeof liveTouches === 'number') continue;
+        if (t - ptrs[k].t > SILENT_MS) { delete ptrs[k]; api.lastReset = 'watchdog'; }
+      }
     };
     api.moveVec = function () {
       var p = joyOwner();
@@ -701,7 +730,12 @@
     if (state.mode === 'intro') { state.mode = 'play'; introLeft = 0; return; }
     if (state.mode === 'reveal') { if (revealT > 1) { state.mode = 'play'; resetInput('reveal'); } return; }
     if (speaker && Math.hypot(e.clientX - speaker.x, e.clientY - speaker.y) <= speaker.r + 8) { say(speaker.text); return; }
-    input.down(e.pointerId, e.clientX, e.clientY, now());
+    input.down(e.pointerId, e.clientX, e.clientY, now(), e.pointerType);
+  });
+  // How many fingers the screen says are down (for the input watchdog).
+  var liveTouches = null;
+  ['touchstart', 'touchend', 'touchcancel'].forEach(function (type) {
+    window.addEventListener(type, function (e) { liveTouches = e.touches ? e.touches.length : null; }, { capture: true, passive: true });
   });
   canvas.addEventListener('pointermove', function (e) { input.move(e.pointerId, e.clientX, e.clientY, now()); });
   canvas.addEventListener('pointerup', function (e) { input.up(e.pointerId, e.clientX, e.clientY, now()); });
@@ -1311,7 +1345,7 @@
   // ── Update ───────────────────────────────────────────────────────────
   var SPEED = 4 * TILE; // px/s
   function update(dt) {
-    input.tick(now());
+    input.tick(now(), liveTouches);
     clock += dt;
     if (state.mode === 'intro') { introLeft -= dt; if (introLeft <= 0) state.mode = 'play'; }
     if (!map && state.map) { loadMap(state.map); snapCamera(); }
@@ -1738,7 +1772,14 @@
     return SPK.getSave(state);
   }
   function setState(saved) {
-    var next = SPK.applySave(SPK.validateSave(saved)); // throws on anything odd: the arcade starts fresh
+    var next;
+    try { next = SPK.applySave(SPK.validateSave(saved)); }
+    catch (e) {
+      // Can't read it: show the title (never a blank screen) and let the arcade know.
+      state = { mode: 'title' }; map = null;
+      show('title', true); show('diff', false); show('welcome', false);
+      throw e;
+    }
     state = next;
     map = null;
     show('title', false); show('diff', false); show('welcome', true);

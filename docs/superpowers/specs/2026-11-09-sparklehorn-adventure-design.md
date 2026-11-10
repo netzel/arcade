@@ -337,7 +337,7 @@ This game must follow those patterns *and* add protections for the new things it
    - `pagehide`;
    - orientation or resize changes;
    - the arcade pause.
-   - A pointer that hasn't sent an event for 3 s while "held" is released. This is a watchdog against iOS dropping `pointerup`.
+   - A watchdog against iOS dropping `pointerup`: held touch pointers are checked against how many fingers the screen reports (`TouchEvent.touches`), and the extra ones are released. A finger held perfectly still sends no events, so silence alone never releases a touch. A pointer with no touch information times out after 30 s. (Changed after the final review: a 3-second silence rule cut off held buttons.)
 5. **The frame loop can't die.**
    - `requestAnimationFrame(frame)` is the first line of `frame`.
    - Update and draw are wrapped in `try/catch`. Errors are counted and logged, never rethrown.

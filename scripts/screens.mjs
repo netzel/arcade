@@ -239,6 +239,8 @@ async function unicornPass(browser, vp) {
     return { ok: r.top >= 0 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1, h: Math.round(r.height), vh: innerHeight };
   });
   check(card.ok, `flight: game-over card fits on screen (${card.h}px in ${card.vh}px)`);
+  // Fly again only becomes tappable after 0.6 s of game time (slow test browsers can lag behind)
+  await page.waitForFunction(() => document.getElementById('over').classList.contains('armed'), null, { timeout: 5000 });
   await tapEl(t.frame().locator('#again'));
   await page.waitForTimeout(100);
   check((await fotu()).state === 'ready', 'flight: Fly again goes straight back to ready');
@@ -253,6 +255,7 @@ async function unicornPass(browser, vp) {
     return window.__fotu && window.__fotu.state === 'over';
   }, null, { timeout: 15000 });
   await page.waitForTimeout(900);
+  await page.waitForFunction(() => document.getElementById('over').classList.contains('armed'), null, { timeout: 5000 });
   await tapEl(t.frame().locator('#toTitle'));
   await page.waitForTimeout(500);
   await tapEl(t.frame().locator('#closetDone'));
@@ -659,6 +662,19 @@ async function sparklehornPass(browser, vp) {
     const sc = await spk();
     check(sb.inputs.active === 0 && sb.inputs.lastReset === 'blur' && Math.abs(sc.x - sb.x) < 1, `sparkle: losing focus releases a held joystick (${sb.inputs.active} active, moved ${Math.round(sc.x - sb.x)})`);
     await touch('touchEnd', []);
+    // Fingers held perfectly still (no move events) keep working: hold ✨ and the stick for 4 s
+    await quiet();
+    await touch('touchStart', [{ x: jx, y: jy, id: 3 }]);
+    await touch('touchMove', [{ x: jx + 60, y: jy, id: 3 }]);
+    await touch('touchStart', [{ x: jx + 60, y: jy, id: 3 }, { x: L.magic.x, y: L.magic.y, id: 4 }]);
+    await page.waitForTimeout(3500);
+    const h0 = await spk();
+    await page.waitForTimeout(800);
+    const h1 = await spk();
+    await touch('touchEnd', []);
+    check(h1.bolts > h0.bolts, `sparkle: holding ✨ still keeps firing after 4 s (${h0.bolts} -> ${h1.bolts})`);
+    check(h1.x !== h0.x || h1.y !== h0.y || h1.inputs.active === 2, `sparkle: holding the stick still keeps walking after 4 s (${h1.inputs.active} fingers held)`);
+    check(h1.inputs.active === 2, `sparkle: still-held fingers are not dropped (${h1.inputs.active} held)`);
   } else {
     if (vp.mobile) console.log('   – multi-touch check skipped on WebKit (no CDP); covered by the input unit tests');
     await page.keyboard.down('ArrowRight');
@@ -723,8 +739,9 @@ async function sparklehornPass(browser, vp) {
   await page.locator('#home').waitFor();
   await page.waitForTimeout(300);
   await page.goBack();
-  await page.waitForFunction(() => window.__spk && document.getElementById('sga-chrome'));
-  await page.waitForTimeout(900);
+  // A fresh (non-cached) Back reloads once more to pick up the Continue save: wait for where it lands.
+  await page.waitForFunction(() => window.__spk && document.getElementById('sga-chrome') && ['welcome', 'play'].includes(window.__spk.state.mode), null, { timeout: 20000 });
+  await page.waitForTimeout(500);
   if (await page.locator('#rotate-hint').isVisible()) await page.locator('#rotate-dismiss').click();
   if (await page.locator('#welcome').isVisible()) await tapEl(page.locator('#resume'));
   await page.waitForTimeout(300);
@@ -736,8 +753,8 @@ async function sparklehornPass(browser, vp) {
 
   // A reload (pull-to-refresh) mid-adventure must not lose it
   await page.reload();
-  await page.waitForFunction(() => window.__spk && document.getElementById('sga-chrome'));
-  await page.waitForTimeout(1200);
+  await page.waitForFunction(() => window.__spk && document.getElementById('sga-chrome') && ['welcome', 'play'].includes(window.__spk.state.mode), null, { timeout: 20000 }).catch(() => {});
+  await page.waitForTimeout(500);
   if (await page.locator('#rotate-hint').isVisible()) await page.locator('#rotate-dismiss').click();
   check(await page.locator('#welcome').isVisible(), 'sparkle: reloading the page comes back to Welcome back, not the title');
   await tapEl(page.locator('#resume'));
@@ -753,6 +770,12 @@ async function sparklehornPass(browser, vp) {
   await page.getByRole('button', { name: 'Start new' }).click();
   await t.loaded();
   check(await page.locator('#play').isVisible(), 'sparkle: ✨ New opens the title screen for a fresh adventure');
+  const kept = await page.evaluate(() => {
+    const k = Object.keys(localStorage).find((x) => x.startsWith('sga:saves:') && x.endsWith(':sparklehorn-adventure'));
+    const rec = k ? JSON.parse(localStorage.getItem(k)) : null;
+    return rec ? (rec.slots || []).some((sl) => sl && sl.state && sl.state.map === 'pebble') : false;
+  });
+  check(kept, 'sparkle: ✨ New tucks the old adventure into a save slot instead of losing it');
   await page.waitForTimeout(300);
 
   check(t.errors.length === 0, `sparkle: no page errors${t.errors.length ? ': ' + [...new Set(t.errors)].slice(0, 3).join(' | ') : ''}`);
@@ -773,6 +796,33 @@ async function sparklehornPass(browser, vp) {
   await t2.ctx.close();
 }
 
+async function sparklehornBadSavePass(browser, vp) {
+  const t = await openContext(browser, vp);
+  const { page } = t;
+  const tap = (x, y) => (vp.mobile ? page.touchscreen.tap(x, y) : page.mouse.click(x, y));
+  await t.home();
+  await page.evaluate(() => {
+    const player = JSON.parse(localStorage.getItem('sga:settings') || '{}').player || '_';
+    localStorage.setItem(`sga:saves:${player}:sparklehorn-adventure`, JSON.stringify({
+      auto: { savedAt: new Date().toISOString(), version: 1, state: { v: 1, nonsense: true }, thumb: null }, slots: [null, null, null] }));
+  });
+  await page.reload();
+  await page.locator('#home').waitFor();
+  await t.launch(SPK_CARD);
+  await page.waitForTimeout(500);
+  check(await page.locator('#play').isVisible(), 'sparkle: a save that cannot be read shows the title, never a blank screen');
+  const pb = await page.locator('#play').boundingBox();
+  await tap(pb.x + pb.width / 2, pb.y + pb.height / 2);
+  await page.waitForTimeout(400);
+  check(await page.locator('#easy').isVisible(), 'sparkle: …and ▶ works from there');
+  await page.reload();
+  await page.waitForFunction(() => window.__spk && document.getElementById('sga-chrome'));
+  await page.waitForTimeout(1200);
+  if (await page.locator('#rotate-hint').isVisible()) await page.locator('#rotate-dismiss').click();
+  check(await page.locator('#play').isVisible(), 'sparkle: reloading with an unreadable save still shows the title');
+  await t.ctx.close();
+}
+
 await fs.mkdir(OUT, { recursive: true });
 const server = spawn(process.execPath, [path.join(ROOT, 'scripts/serve.mjs')], { env: { ...process.env, PORT: String(PORT) }, stdio: 'ignore' });
 await new Promise((r) => setTimeout(r, 600));
@@ -786,7 +836,8 @@ try {
   await pauseRacePass(browser, VIEWPORTS[0]);
   await brokenAudioPass(browser, VIEWPORTS[0], 'ctor');
   await brokenAudioPass(browser, VIEWPORTS[3], 'nodes');
-  for (const vp of process.env.ONLY_ROBUST ? [] : VIEWPORTS) {
+  // ONLY_VP=desktop (or any viewport name) runs just that size.
+  for (const vp of process.env.ONLY_ROBUST ? [] : VIEWPORTS.filter((v) => !process.env.ONLY_VP || v.name === process.env.ONLY_VP)) {
     console.log(`\n▶ ${vp.name} (${vp.width}x${vp.height})`);
     await freshPass(browser, vp);
     console.log('  ↳ Flight of the Unicorn');
@@ -795,6 +846,7 @@ try {
     await mazePass(browser, vp);
     console.log('  ↳ Sparklehorn Adventure');
     await sparklehornPass(browser, vp);
+    if (vp.savesPass) await sparklehornBadSavePass(browser, vp);
     if (vp.savesPass) {
       console.log('  ↳ with saves turned on');
       await savesPass(browser, vp);
