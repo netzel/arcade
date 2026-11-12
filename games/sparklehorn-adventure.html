@@ -1009,10 +1009,12 @@
       L.joyZone = { x: i.l, y: h * 0.55, w: w * 0.6 - i.l, h: h * 0.45 };
       L.magic = { x: R - 72, y: B - 90, r: 50 };
       L.horn = { x: R - 72, y: B - 200, r: 44 };
+      L.dpad = { x: i.l + 80, y: B - 96, r: 58 };
     } else {
       L.joyZone = { x: i.l, y: h * 0.25, w: w * 0.55 - i.l, h: h * 0.75 };
       L.magic = { x: R - 80, y: B - 80, r: 50 };
       L.horn = { x: R - 190, y: B - 60, r: 44 };
+      L.dpad = { x: i.l + 78, y: B - 76, r: 58 };
     }
     return L;
   };
@@ -1038,15 +1040,28 @@
     function inCircle(c, x, y) { return Math.hypot(x - c.x, y - c.y) <= c.r + BTN_SLOP; }
     function inRect(z, x, y) { return x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h; }
     function joyOwner() { for (var k in ptrs) if (ptrs[k].role === 'joy') return ptrs[k]; return null; }
+    function dpadOwner() { for (var k in ptrs) if (ptrs[k].role === 'dpad') return ptrs[k]; return null; }
+    // The d-pad steers from where the thumb is now, measured from the pad's
+    // middle, snapped to 8 directions (sliding off the pad keeps steering).
+    function dpadVec() {
+      var p = dpadOwner(), d = L.dpad;
+      if (!p || !d) return null;
+      var dx = p.x - d.x, dy = p.y - d.y;
+      if (Math.hypot(dx, dy) < d.r * 0.22) return { x: 0, y: 0 };
+      var a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+      var x = Math.cos(a), y = Math.sin(a);
+      return { x: Math.abs(x) < 1e-9 ? 0 : x, y: Math.abs(y) < 1e-9 ? 0 : y };
+    }
 
     api.down = function (id, x, y, t, type) {
       if (ptrs[id]) api.cancel(id);
       var role = 'none';
       for (var b = 0; b < BUTTONS.length; b++) if (inCircle(L[BUTTONS[b]], x, y)) { role = BUTTONS[b]; break; }
-      if (role === 'none' && inRect(L.joyZone, x, y) && !joyOwner()) role = 'joy';
+      if (role === 'none' && L.dpad && Math.hypot(x - L.dpad.x, y - L.dpad.y) <= L.dpad.r + BTN_SLOP && !dpadOwner()) role = 'dpad';
+      else if (role === 'none' && inRect(L.joyZone, x, y) && !joyOwner()) role = 'joy';
       else if (role === 'none') role = 'tap'; // anywhere else: a quick tap walks you there
       ptrs[id] = { role: role, x0: x, y0: y, x: x, y: y, t0: t, t: t, maxD: 0, touch: type === 'touch' };
-      if (role !== 'none' && role !== 'joy' && role !== 'tap') presses[role] = true;
+      if (role !== 'none' && role !== 'joy' && role !== 'tap' && role !== 'dpad') presses[role] = true;
       return role;
     };
     api.move = function (id, x, y, t) {
@@ -1088,6 +1103,8 @@
       }
     };
     api.moveVec = function () {
+      var dv = dpadVec();
+      if (dv) return dv;
       var p = joyOwner();
       if (!p) return { x: 0, y: 0 };
       var dx = p.x - p.x0, dy = p.y - p.y0, d = Math.hypot(dx, dy);
@@ -1095,6 +1112,7 @@
       var m = Math.min(1, (d - DEADZONE) / (JOY_R - DEADZONE)) / d;
       return { x: dx * m, y: dy * m };
     };
+    api.dpad = function () { var v = dpadVec(); return v && (v.x || v.y) ? v : null; };
     api.joy = function () { var p = joyOwner(); return p ? { x0: p.x0, y0: p.y0, x: p.x, y: p.y, r: JOY_R } : null; };
     api.held = function (name) { for (var k in ptrs) if (ptrs[k].role === name) return true; return false; };
     api.consumePress = function (name) { var v = !!presses[name]; presses[name] = false; return v; };
@@ -2269,6 +2287,34 @@
     ctx.fillText(emoji, c.x, c.y + (down ? 5 : 2));
     ctx.restore();
   }
+  // The d-pad: a cross with four arrows; the way you're pushing lights up.
+  function drawDpad(d, dir) {
+    if (!d) return;
+    var a = d.r * 0.36, L2 = d.r * 0.92;
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.globalAlpha = 0.3; ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(0, 0, d.r, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#6d28d9'; ctx.lineWidth = 3;
+    ctx.beginPath(); roundRectAt(-a, -L2, a * 2, L2 * 2, a * 0.5); roundRectAt(-L2, -a, L2 * 2, a * 2, a * 0.5); ctx.fill();
+    for (var i = 0; i < 4; i++) {
+      var ang = i * Math.PI / 2, cx = Math.cos(ang), cy = Math.sin(ang);
+      var on = dir && cx * dir.x + cy * dir.y > 0.5; // diagonals light two arms
+      ctx.save(); ctx.rotate(ang);
+      if (on) { ctx.globalAlpha = 0.95; ctx.fillStyle = '#fde68a'; ctx.fillRect(a * 0.6, -a + 2, L2 - a * 1.1, a * 2 - 4); }
+      ctx.globalAlpha = 0.9; ctx.fillStyle = '#6d28d9';
+      ctx.beginPath(); ctx.moveTo(L2 - a * 0.35, 0); ctx.lineTo(L2 - a * 1.25, -a * 0.65); ctx.lineTo(L2 - a * 1.25, a * 0.65); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 0.6; ctx.fillStyle = '#c4b5fd';
+    ctx.beginPath(); ctx.arc(0, 0, a * 0.55, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  function roundRectAt(x, y, w, h, r) { // adds to the current path
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
   function drawControls() {
     var L = input.layout();
     var j = input.joy();
@@ -2281,6 +2327,7 @@
       ctx.beginPath(); ctx.arc(j.x0 + dx * k, j.y0 + dy * k, j.r * 0.45, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
+    drawDpad(L.dpad, input.dpad());
     circleBtn(L.horn, '🦄', holding('horn'));
     circleBtn(L.magic, '✨', holding('magic'));
     circleBtn(L.map, '🗺️', input.held('map'));

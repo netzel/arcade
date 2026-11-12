@@ -1255,3 +1255,49 @@ test('a closet in a save loads back; wearing something you do not own is taken o
   assert.equal(odd.closet.wearing.color, null);
   assert.equal(odd.closet.wearing.accessory, null);
 });
+
+// ── Slice 4, Task 1: the d-pad ──────────────────────────────────────────
+test('a small d-pad sits bottom-left, clear of every button, on every screen', () => {
+  for (const [w, h] of [[390, 844], [844, 390], [667, 375], [820, 1180], [1180, 820], [1440, 900]]) {
+    const L = SPK.layoutControls(w, h);
+    const d = L.dpad;
+    assert.ok(d && d.r >= 50 && d.r <= 70, `${w}x${h} d-pad is small but thumb-sized`);
+    assert.ok(d.x - d.r >= 0 && d.y + d.r <= h && d.x < w / 3 && d.y > h / 2, `${w}x${h} d-pad bottom-left and on screen`);
+    for (const c of [L.horn, L.magic, L.map]) assert.ok(Math.hypot(c.x - d.x, c.y - d.y) > c.r + d.r, `${w}x${h} d-pad apart from buttons`);
+  }
+});
+
+test('holding the d-pad walks in one of 8 directions; the middle does nothing', () => {
+  const L = LAND(), d = L.dpad, inp = SPK.createInput(L);
+  assert.equal(inp.down(1, d.x + d.r * 0.7, d.y, 0, 'touch'), 'dpad');
+  let v = inp.moveVec();
+  assert.ok(near(v.x, 1) && near(v.y, 0), `right ${JSON.stringify(v)}`);
+  inp.move(1, d.x + d.r * 0.5, d.y - d.r * 0.45, 16); // up-right-ish
+  v = inp.moveVec();
+  assert.ok(near(v.x, Math.SQRT1_2) && near(v.y, -Math.SQRT1_2), `diagonal ${JSON.stringify(v)}`);
+  inp.move(1, d.x - 2, d.y + 3, 32);
+  assert.deepEqual({ ...inp.moveVec() }, { x: 0, y: 0 }, 'the middle is a rest spot');
+  inp.move(1, d.x, d.y + d.r * 2, 48); // the thumb slides off the pad: still steering
+  v = inp.moveVec();
+  assert.ok(near(v.x, 0) && near(v.y, 1), `slid off, still down ${JSON.stringify(v)}`);
+  assert.deepEqual({ ...inp.dpad() }, { x: 0, y: 1 });
+  inp.up(1, d.x, d.y + d.r * 2, 60);
+  assert.equal(inp.consumeTap(), null, 'letting go of the d-pad is never a tap-to-walk');
+  assert.deepEqual({ ...inp.moveVec() }, { x: 0, y: 0 });
+  assert.equal(inp.dpad(), null);
+});
+
+test('tapping the world and the floating joystick still work next to the d-pad', () => {
+  const L = LAND(), inp = SPK.createInput(L);
+  const p = { x: L.joyZone.x + L.joyZone.w * 0.7, y: L.joyZone.y + 20 };
+  assert.equal(inp.down(1, p.x, p.y, 0), 'joy');
+  inp.up(1, p.x, p.y, 100);
+  assert.deepEqual({ ...inp.consumeTap() }, p, 'a quick tap still walks you there');
+  assert.equal(inp.down(2, 600, 60, 200), 'tap');
+  const d = L.dpad;
+  inp.down(3, d.x - d.r * 0.8, d.y, 300, 'touch');
+  inp.down(4, p.x, p.y, 310);
+  inp.move(4, p.x, p.y + 60, 320);
+  const v = inp.moveVec();
+  assert.ok(near(v.x, -1) && near(v.y, 0), 'the d-pad wins over a second finger on the joystick');
+});
