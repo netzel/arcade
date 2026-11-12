@@ -1490,3 +1490,60 @@ test('once King Grumpcap is happy, the hint says you did it, even if you skipped
   g.bossBeaten = true;
   assert.equal(SPK.stage(g).key, 'done');
 });
+
+// ── Slice 4 polish: the small things ─────────────────────────────────────
+test('a thumb resting in the middle of the d-pad leaves the joystick free', () => {
+  const L = LAND(), d = L.dpad, inp = SPK.createInput(L);
+  const p = { x: L.joyZone.x + L.joyZone.w * 0.7, y: L.joyZone.y + 20 };
+  assert.equal(inp.down(1, d.x + 2, d.y - 2, 0, 'touch'), 'dpad');
+  assert.equal(inp.down(2, p.x, p.y, 10, 'touch'), 'joy');
+  inp.move(2, p.x, p.y + 60, 20);
+  const v = inp.moveVec();
+  assert.ok(v.y > 0.5 && near(v.x, 0), `the joystick steers ${JSON.stringify(v)}`);
+  assert.equal(inp.dpad(), null);
+});
+
+test('the crown never lands inside a pillar or a wall', () => {
+  const m = SPK.parseMap('throne'), T = SPK.TILE;
+  for (const [tx, ty] of [[5, 5], [20, 12], [13, 2], [0, 0], [13, 9]]) {
+    const at = SPK.openSpotNear(m, (tx + 0.5) * T, (ty + 0.5) * T, {});
+    assert.ok(!SPK.isSolid(m, Math.floor(at.x / T), Math.floor(at.y / T), {}), `${tx},${ty} -> open floor`);
+    assert.ok(Math.hypot(at.x - (tx + 0.5) * T, at.y - (ty + 0.5) * T) <= 3 * T, `${tx},${ty} stays close`);
+  }
+  assert.deepEqual({ ...SPK.openSpotNear(m, 13.5 * T, 9.2 * T, {}) }, { x: 13.5 * T, y: 9.2 * T }, 'an open spot stays put');
+});
+
+test('reloading in the middle of the fight starts you at the door, not next to him', () => {
+  const g = SPK.createGame('normal'), T = SPK.TILE;
+  g.map = 'throne'; g.x = 13.5 * T; g.y = 9.5 * T; g.bossHp = 20;
+  let back = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g)))));
+  const door = SPK.doorArrival('throne:U:13,16');
+  assert.equal(back.map, 'throne');
+  assert.deepEqual([back.x, back.y], [(door.tx + 0.5) * T, (door.ty + 0.5) * T]);
+  assert.equal(SPK.bossHpNow(back), 20, 'his hearts stay where they were');
+  g.bossBeaten = true; g.bossHp = 0;
+  back = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g)))));
+  assert.deepEqual([back.x, back.y], [13.5 * T, 9.5 * T], 'once he is happy you load where you were');
+});
+
+test('a save with zero boss hearts but no win brings him back at full hearts', () => {
+  const g = SPK.createGame('normal');
+  g.bossHp = 0;
+  assert.equal(SPK.bossHpNow(g), 40);
+  const s = JSON.parse(JSON.stringify(SPK.getSave(g))); s.bossHp = 0;
+  assert.equal(SPK.bossHpNow(SPK.applySave(SPK.validateSave(s))), 40);
+  g.bossBeaten = true;
+  assert.equal(SPK.bossHpNow(g), 0, 'beaten is still zero');
+});
+
+test('summoned slimes appear away from you, never on top of you or in a wall', () => {
+  const m = SPK.parseMap('throne'), T = SPK.TILE;
+  for (const [bx, by, px, py] of [[13.5, 7.5, 13.5, 8.6], [13.5, 7.5, 12.2, 7.5], [3.5, 3.5, 4.5, 4.5], [21.5, 13.5, 21.5, 12.4]]) {
+    const spots = SPK.summonSpots(m, bx * T, by * T, px * T, py * T, {});
+    assert.ok(spots.length >= 2 && spots.length <= 3, `${bx},${by}: ${spots.length} slimes`);
+    for (const s of spots) {
+      assert.ok(!SPK.isSolid(m, Math.floor(s.x / T), Math.floor(s.y / T), {}), 'open floor');
+      assert.ok(Math.hypot(s.x - px * T, s.y - py * T) >= 2 * T, `at least 2 tiles from you (${bx},${by})`);
+    }
+  }
+});

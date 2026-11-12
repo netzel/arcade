@@ -595,7 +595,7 @@
   SPK.bossMax = function (state) { return SPK.DIFF[state.difficulty].bossHp; };
   SPK.bossHpNow = function (state) {
     var hp = state.bossHp, max = SPK.bossMax(state);
-    return typeof hp === 'number' && hp >= 0 && hp <= max ? hp : max;
+    return typeof hp === 'number' && hp >= (state.bossBeaten ? 0 : 1) && hp <= max ? hp : max;
   };
   SPK.bossPhase = function (state) {
     var d = SPK.DIFF[state.difficulty], hp = SPK.bossHpNow(state);
@@ -693,6 +693,44 @@
   SPK.reachBossRoom = function (state) {
     if (state.campfires.indexOf(SPK.HOLLOW_FIRE) < 0) state.campfires.push(SPK.HOLLOW_FIRE);
     state.wakeCampfire = SPK.HOLLOW_FIRE;
+  };
+  SPK.THRONE_DOOR = 'throne:U:13,16';
+  SPK.CELEBRATE_SECS = 12; // the party goes home on its own if nobody taps
+  // The nearest open floor to a spot (in pixels): the spot itself if it's open.
+  SPK.openSpotNear = function (map, x, y, ctx) {
+    var T = SPK.TILE, tx = Math.floor(x / T), ty = Math.floor(y / T);
+    if (!SPK.isSolid(map, tx, ty, ctx)) return { x: x, y: y };
+    for (var r = 1; r < Math.max(map.w, map.h); r++) {
+      var best = null, bd = Infinity;
+      for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || SPK.isSolid(map, tx + dx, ty + dy, ctx)) continue;
+        var d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; best = { x: (tx + dx + 0.5) * T, y: (ty + dy + 0.5) * T }; }
+      }
+      if (best) return best;
+    }
+    return { x: x, y: y };
+  };
+  // Where his three slimes pop out: around him, on open floor, at least two
+  // tiles from you, the farthest from you first.
+  SPK.summonSpots = function (map, bx, by, px, py, ctx) {
+    var T = SPK.TILE, c = [];
+    [1.7, 2.6].forEach(function (dist) {
+      for (var i = 0; i < 12; i++) {
+        var a = i / 12 * Math.PI * 2, x = bx + Math.cos(a) * dist * T, y = by + Math.sin(a) * dist * T;
+        if (SPK.isSolid(map, Math.floor(x / T), Math.floor(y / T), ctx)) continue;
+        var dp = Math.hypot(x - px, y - py);
+        if (dp >= 2 * T) c.push({ x: x, y: y, dp: dp, a: a });
+      }
+    });
+    c.sort(function (p, q) { return q.dp - p.dp; });
+    var out = [];
+    for (var j = 0; j < c.length && out.length < 3; j++) {
+      var ok = true; // spread out, not all in one clump
+      for (var k = 0; k < out.length; k++) if (Math.hypot(out[k].x - c[j].x, out[k].y - c[j].y) < T * 1.2) ok = false;
+      if (ok) out.push({ x: c[j].x, y: c[j].y });
+    }
+    return out;
   };
   SPK.lightCampfire = function (state, id) {
     var fresh = state.campfires.indexOf(id) < 0;
@@ -1065,6 +1103,7 @@
     var okSpot = Object.prototype.hasOwnProperty.call(SPK.MAPS, s.map) && isInt(s.x) && isInt(s.y) &&
       !SPK.isSolid(SPK.parseMap(s.map), s.x, s.y, { broken: s.broken, powers: s.powers });
     if (!okSpot) { var at = SPK.besideFire(s.wakeCampfire); s.map = at.map; s.x = at.tx; s.y = at.ty; }
+    if (s.map === 'throne' && !s.bossBeaten) { var door = SPK.doorArrival(SPK.THRONE_DOOR); s.x = door.tx; s.y = door.ty; }
     var hpMax = SPK.DIFF[s.difficulty].hp + 2 * Math.floor(s.heartPieces.length / 4);
     if (!isInt(s.hp) || s.hp < 1 || s.hp > hpMax) bad('hp');
     if (!isInt(s.gems) || s.gems < 0) bad('gems');
@@ -1268,7 +1307,8 @@
     };
     api.moveVec = function () {
       var dv = dpadVec();
-      if (dv) return dv;
+      if (dv && (dv.x || dv.y)) return dv;
+      if (dv && !joyOwner()) return dv;
       var p = joyOwner();
       if (!p) return { x: 0, y: 0 };
       var dx = p.x - p.x0, dy = p.y - p.y0, d = Math.hypot(dx, dy);
@@ -1400,13 +1440,16 @@
       if (e.key === 'Escape' || PRESSKEYS[e.key] === 'map') { e.preventDefault(); closeOverlays(); }
       return;
     }
+    if (state.mode === 'celebrate') {
+      if (KEYMAP[e.key] || PRESSKEYS[e.key] || e.key === 'Enter') { e.preventDefault(); if (!e.repeat && celebT > 2.5) endCelebration(); }
+      return;
+    }
     if (KEYMAP[e.key]) { keys[KEYMAP[e.key]] = true; e.preventDefault(); return; }
     var name = PRESSKEYS[e.key];
     if (!name) return;
     e.preventDefault();
     if (state.mode === 'intro') { state.mode = 'play'; return; }
     if (state.mode === 'reveal') { if (revealT > 1) state.mode = 'play'; return; }
-    if (state.mode === 'celebrate') { if (celebT > 2.5) endCelebration(); return; }
     if (!keys[name]) keyPress[name] = true;
     keys[name] = true;
   });
@@ -1634,7 +1677,7 @@
     SPK.reachBossRoom(state);
     if (state.bossBeaten) {
       boss = { happy: true, x: BOSS_HOME.x, y: BOSS_HOME.y, t: 0, z: 0 };
-      if (state.closet.owned.indexOf('rainbowCrown') < 0) crownPick = { x: BOSS_HOME.x, y: BOSS_HOME.y + TILE * 1.7 };
+      if (state.closet.owned.indexOf('rainbowCrown') < 0) crownPick = SPK.openSpotNear(map, BOSS_HOME.x, BOSS_HOME.y + TILE * 1.7, enemyCtx());
       return;
     }
     boss = { kind: 'boss', x: BOSS_HOME.x, y: BOSS_HOME.y, hp: SPK.bossHpNow(state), t: 0, act: 'walk', at: 0, cd: 2.5, summonCd: 3,
@@ -1677,11 +1720,9 @@
           }
           e.cd = (ph === 1 ? 3 : 3.6) / d.enemyAtk; e.act = 'walk'; sfx('drip');
         } else if (e.act === 'summon') {
-          for (var j = 0; j < 3; j++) {
-            var sa = j / 3 * Math.PI * 2 + 0.5, sx = e.x + Math.cos(sa) * TILE * 1.7, sy = e.y + Math.sin(sa) * TILE * 1.7;
-            if (SPK.isSolid(map, Math.floor(sx / TILE), Math.floor(sy / TILE), enemyCtx())) { sx = e.x; sy = e.y + TILE; }
-            spawnEnemy('slime', sx, sy, null); burst(sx, sy, 8, ['#4ade80', '#f472b6', '#ffffff'], 60);
-          }
+          SPK.summonSpots(map, e.x, e.y, state.x, state.y, enemyCtx()).forEach(function (p) {
+            spawnEnemy('slime', p.x, p.y, null); burst(p.x, p.y, 8, ['#4ade80', '#f472b6', '#ffffff'], 60);
+          });
           e.cd = 2; e.act = 'walk'; sfx('pop');
         } else { // crouch -> jump at where you are
           e.act = 'jump'; e.at = 0.8; e.jx0 = e.x; e.jy0 = e.y; e.jx1 = state.x; e.jy1 = state.y; sfx('hop');
@@ -1705,7 +1746,7 @@
     enemies = enemies.filter(function (o) { return o.hp > 0; }); // no grumpy face over the happy one
     spores = []; waves = [];
     boss = { happy: true, x: e.x, y: e.y, t: 0, z: 0 };
-    crownPick = { x: e.x, y: Math.min(e.y + TILE * 1.7, (map.h - 3.5) * TILE) };
+    crownPick = SPK.openSpotNear(map, e.x, Math.min(e.y + TILE * 1.7, (map.h - 3.5) * TILE), enemyCtx());
     hitPause = 0.3; shake = 0.3;
     burst(e.x, e.y - 20, 70, RAINBOW.concat(['#ffffff']), 240);
     sfx('fanfare'); onDiscovery();
@@ -2515,7 +2556,7 @@
       return;
     }
     if (state.mode === 'reveal') { revealT += dt; updatePickups(dt); return; }
-    if (state.mode === 'celebrate') { celebT += dt; return; }
+    if (state.mode === 'celebrate') { celebT += dt; if (celebT > SPK.CELEBRATE_SECS) endCelebration(); return; }
     if (state.mode === 'mapview' || state.mode === 'closet') return; // the world waits
     if (state.mode !== 'play') return;
     if (hitPause > 0) { hitPause -= dt; return; }
