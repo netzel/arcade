@@ -75,8 +75,8 @@
   SPK.TILE = 32;
 
   SPK.DIFF = {
-    easy:   { hp: 12, autoMagic: true,  autoMagicEvery: 0.5, enemySpeed: 0.7, enemyAtk: 0.7, maxHit: 1, hintAfter: 45,   beetleMagicFull: true },
-    normal: { hp: 8,  autoMagic: false, autoMagicEvery: 0.5, enemySpeed: 1,   enemyAtk: 1,   maxHit: 2, hintAfter: null, beetleMagicFull: false },
+    easy:   { hp: 12, autoMagic: true,  autoMagicEvery: 0.5, enemySpeed: 0.7, enemyAtk: 0.7, maxHit: 1, hintAfter: 45,   beetleMagicFull: true,  bossHp: 30, bossP2: 20, bossP3: 6,  bossSpore: 0.75 },
+    normal: { hp: 8,  autoMagic: false, autoMagicEvery: 0.5, enemySpeed: 1,   enemyAtk: 1,   maxHit: 2, hintAfter: null, beetleMagicFull: false, bossHp: 40, bossP2: 26, bossP3: 13, bossSpore: 1 },
   };
 
   // ── World maps (one character = one tile) ─────────────────────────
@@ -84,7 +84,7 @@
   // D cave door  U cave exit  F campfire  C chest  H heart piece  S slimes
   // M mushrooms  P power pedestal  @ start  = cave floor
   // > path to the next area  * star friend  g glowshroom  L landmark  a bats
-  // o lily pad  v sky gap (Cloud Hop)  W the closet  f frogs  z bees
+  // o lily pad  v sky gap (Cloud Hop)  W the closet  f frogs  z bees  r rock beetles
   SPK.MAPS = {
     meadow: { name: 'Sunny Meadow', floor: '.', rows: [
       'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
@@ -250,7 +250,7 @@
       '>::::::::..,~~o~~~~~~~~~..##D##..~~~~~~~~~~~~..T.TTT',
       'TT.........~o~~~~~~~~~~...........~~~~~~~~~~~~..HTTT',
       'TT,...F.....~~~~~~~~~~~...........~~~~~~~~~~~T.TTTTT',
-      'TT.T......T.~o~~~~~~~~~,.C...,T...~~~~~~~~~~~.....TT',
+      'TT.T......T.~o~~~~~~~~~,.C...,T...~~~~~~~~~~~......>',
       'TT....T,....~~~~~~~~~~~~......T..~~~~~~~~~~~o..,..TT',
       'TT,.,.T..,...~~o~~~~~~~~~~~..T~~~~~~~~~~~~~~....T.TT',
       'TT.........,.~~~~~~~~...~~~~~~~~~~~~~~~~~~~~..f...TT',
@@ -271,7 +271,7 @@
       'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
       'TT........,........,T.#...T.T.....T.....,.......TT',
       'TT,...,.....C..T.......,.......C.#........#.T...TT',
-      'TT................,.F.....L...........,.z.......TT',
+      'TT................,.F.....L...........,.z........>',
       'TT........,#......#....T......,.............,..TTT',
       'TT..............................................TT',
       'TTvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvTT',
@@ -326,11 +326,99 @@
       '##################################',
       '##################################',
     ] },
+    ruins: { name: 'Moonlight Ruins', floor: '.', theme: 'ruins', rows: [
+      'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+      'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+      'TT.....#............,....................,..........TT',
+      'TT.H....................,...........#..~~~~~~~~~~~~.TT',
+      'TT.....#.......,T......................~~~~~~~~~~~~.TT',
+      'TT######...............,.....#.........~~,.#####.~~.TT',
+      '>::::::::::::::::::::.###:#::#####.....~~..##D##.~~.TT',
+      'TT...............T..:.#..........#.....~~....:...~~.TT',
+      'TTT.................:.:.......C..#..,..~~....:...~~.TT',
+      'TT....T..#,T........:.#..........#....,~~....:...~~.TT',
+      'TT..C...............:::....L.....:...,.~~.C..:...~~.TT',
+      'TTTT................:.#..........#.....~~....:..,~~.TT',
+      'TT..........,.M.....:.#.,......,.#.....~~~~~~~~~~~~.TT',
+      'TT.....,............:,#..........#.....~~~~~~~~~~~~.TT',
+      'TT..............T...:.#####::##:##....:,.......,....TT',
+      'TT.T.,..............:..,...:..........:.............TT',
+      'TT.....,........,.........,:..........:.....,......TTT',
+      'TT.....................F...:..........:.z........,.,TT',
+      'TT.....T...S........:::::::::::::::::::...,.........TT',
+      'TT.....,.............................,..............TT',
+      'TT........,....,..............T...............r.....TT',
+      'TT..................:...........,.....T.............TT',
+      'TT....,.............:.............M...,.............TT',
+      'T#########..........:.....................,.........TT',
+      'TT.....vv.....,.....:.....r............#############TT',
+      'TT.....vv.....r.....:.......T..,........,vv.........TT',
+      'TT..,..vv......,....:..............,.....vv.........TT',
+      'TT.....vv...........:......,....,......,.vv...C.....TT',
+      '>:.....vv::::::::::::........,...........vv.........TT',
+      'TT.....vv....#...........................vv.........TT',
+      'TT.....vv...,.................S.......,..vv.....*...TT',
+      'TT.,...vv...C.........T..........,..C....vv.,.......TT',
+      'TT.....vv.......,..,.....................vv.......,.TT',
+      'TT.....vv..................,.............vv.........TT',
+      'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+      'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+    ] },
+    hollow: { name: "Grumpcap's Hollow", floor: '=', cave: true, dark: 'dark', theme: 'hollow', rows: [
+      '##########################################',
+      '##########################################',
+      '##########################################',
+      '##########=============##======vv======###',
+      '##########==C===a====g=##=g====vv=C=*==###',
+      '##########=g===================vv======###',
+      '##########=======g=====g===###############',
+      '##########=================###############',
+      '################=========###=========#####',
+      '################====r====###=g=====g=#####',
+      '################=========###=========#####',
+      '##========######=========###=========#####',
+      '##=g=================================#####',
+      '#U====S=============g=========a==F===D####',
+      '##===================================#####',
+      '##======g=######=====M===###=========#####',
+      '##========######=========###=========#####',
+      '################=========###=g=====g=#####',
+      '#####===########===r=====###=========#####',
+      '#####===########=========#################',
+      '####=====================#################',
+      '####=========g===g=====C=#################',
+      '####===~~~~~=============#################',
+      '####===~~H~~==r==#########################',
+      '####=C=~~~~~=====#########################',
+      '####=============#########################',
+      '##########################################',
+      '##########################################',
+    ] },
+    throne: { name: "King Grumpcap's Room", floor: '=', cave: true, theme: 'throne', rows: [
+      '##########################',
+      '##########################',
+      '##g==========L=========g##',
+      '##======================##',
+      '##======================##',
+      '##===#==============#===##',
+      '##======================##',
+      '##======================##',
+      '##======================##',
+      '##======================##',
+      '##======================##',
+      '##======================##',
+      '##===#==============#===##',
+      '##======================##',
+      '##======================##',
+      '##g====================g##',
+      '#############U############',
+      '##########################',
+    ] },
   };
 
-  SPK.LEGEND = '.,:T~#BDUFCHSMP@=>*gLaovWfz';
+  SPK.LEGEND = '.,:T~#BDUFCHSMP@=>*gLaovWfzr';
   var SOLID = { T: 1, '~': 1, '#': 1, B: 1, L: 1, v: 1, W: 1 };
-  var ENTITY = { B: 1, D: 1, U: 1, F: 1, C: 1, H: 1, S: 1, M: 1, P: 1, '@': 1, '>': 1, '*': 1, L: 1, a: 1, W: 1, f: 1, z: 1 };
+  var ENTITY = { B: 1, D: 1, U: 1, F: 1, C: 1, H: 1, S: 1, M: 1, P: 1, '@': 1, '>': 1, '*': 1, L: 1, a: 1, W: 1, f: 1, z: 1, r: 1 };
   SPK.EXITS = { D: 1, U: 1, '>': 1 };
   var mapCache = {};
 
@@ -422,6 +510,14 @@
     'cloud:U:1,10': { to: 'lake', at: 'lake:D:28,16' },
     'lake:>:26,0': { to: 'hills', at: 'hills:>:25,33' },
     'hills:>:25,33': { to: 'lake', at: 'lake:>:26,0' },
+    'hills:>:49,4': { to: 'ruins', at: 'ruins:>:0,6' },
+    'ruins:>:0,6': { to: 'hills', at: 'hills:>:49,4' },
+    'lake:>:51,19': { to: 'ruins', at: 'ruins:>:0,28' },
+    'ruins:>:0,28': { to: 'lake', at: 'lake:>:51,19' },
+    'ruins:D:45,6': { to: 'hollow', at: 'hollow:U:1,13' },
+    'hollow:U:1,13': { to: 'ruins', at: 'ruins:D:45,6' },
+    'hollow:D:37,13': { to: 'throne', at: 'throne:U:13,16' },
+    'throne:U:13,16': { to: 'hollow', at: 'hollow:D:37,13' },
   };
 
   SPK.entity = function (id) {
@@ -481,6 +577,44 @@
     bat:       { hp: 1, speed: 1.6, sense: 5, touch: 1, dive: { every: 2.4, windup: 0.4, speed: 5, dur: 0.45 } },
     frog:      { hp: 2, speed: 1.4, sense: 6, touch: 1, spit: { every: 2.6, windup: 0.6, speed: 2.2, dmg: 1 } },
     bee:       { hp: 2, speed: 1.8, sense: 6, touch: 1, dive: { every: 2.8, windup: 0.55, speed: 4.5, dur: 0.5 } },
+    beetle:    { hp: 4, speed: 0.9, sense: 5, touch: 1, armored: true },
+  };
+  // Rock beetles are armored on top: magic does half (full on Easy), and the
+  // horn flips them over so everything does full damage for a moment.
+  SPK.FLIP_SECS = 2.5;
+  SPK.hitDamage = function (state, e, raw, src) {
+    var def = SPK.ENEMIES[e.kind];
+    if (!def || !def.armored || src === 'horn' || e.flipped > 0 || SPK.DIFF[state.difficulty].beetleMagicFull) return raw;
+    return raw / 2;
+  };
+
+  // ── King Grumpcap ────────────────────────────────────────────────────
+  // His hearts live in the save (bossHp), so getting sleepy never heals him.
+  SPK.BOSS_SHIELD_MS = 400;
+  SPK.BOSS_MAX_HIT = 6; // a Mega Horn bonk is big, but never the whole fight
+  SPK.bossMax = function (state) { return SPK.DIFF[state.difficulty].bossHp; };
+  SPK.bossHpNow = function (state) {
+    var hp = state.bossHp, max = SPK.bossMax(state);
+    return typeof hp === 'number' && hp >= 0 && hp <= max ? hp : max;
+  };
+  SPK.bossPhase = function (state) {
+    var d = SPK.DIFF[state.difficulty], hp = SPK.bossHpNow(state);
+    return hp > d.bossP2 ? 1 : hp > d.bossP3 ? 2 : 3;
+  };
+  SPK.bossHit = function (state, dmg, nowMs) {
+    if (state.bossBeaten) return null;
+    if ((state.fx.bossShield || 0) > nowMs) return 'immune';
+    state.bossHp = Math.max(0, SPK.bossHpNow(state) - Math.min(dmg, SPK.BOSS_MAX_HIT));
+    if (state.bossHp <= 0) { state.bossBeaten = true; return 'beaten'; }
+    state.fx.bossShield = nowMs + SPK.BOSS_SHIELD_MS;
+    return 'hit';
+  };
+  // The Rainbow Crown he drops: yours once, worn right away.
+  SPK.takeCrown = function (state) {
+    if (!state.bossBeaten || state.closet.owned.indexOf('rainbowCrown') >= 0) return false;
+    state.closet.owned.push('rainbowCrown');
+    state.closet.wearing.accessory = 'rainbowCrown';
+    return true;
   };
 
   function angleDiff(a, b) { var d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; }
@@ -696,6 +830,16 @@
     'hills:C:38,16':  { gems: 12 },
     'hills:C:31,3':   { upgrade: 'doubleSparkle' }, // by the windmill, top plateau
     'hills:C:12,3':   { gems: 15 },
+    'ruins:C:4,10':   { gems: 10 },
+    'ruins:C:30,8':   { powerup: 'mega' },        // in the moon courtyard
+    'ruins:C:42,10':  { gems: 20 },               // in the moat
+    'ruins:C:46,27':  { gems: 15 },               // the kitty's corner
+    'ruins:C:12,31':  { gems: 8 },
+    'ruins:C:36,31':  { powerup: 'starBurst' },
+    'hollow:C:12,4':  { gems: 12 },
+    'hollow:C:34,4':  { gems: 20 },               // past the chasm
+    'hollow:C:23,21': { powerup: 'swirl' },
+    'hollow:C:5,24':  { gems: 10 },
   };
 
   // ── Star Friends ─────────────────────────────────────────────────────
@@ -710,6 +854,8 @@
     'lake:*:35,11':   { emoji: '🦆', name: 'Duck' },
     'cloud:*:29,12':  { emoji: '🐲', name: 'Baby Dragon' },
     'hills:*:5,11':   { emoji: '🐑', name: 'Lamb' },
+    'ruins:*:48,30':  { emoji: '🐱', name: 'Kitty' },
+    'hollow:*:36,4':  { emoji: '🐼', name: 'Panda' },
   };
   SPK.meetFriend = function (state, id) {
     var f = SPK.FRIENDS[id];
@@ -747,6 +893,8 @@
   SPK.GROTTO_BOULDER = 'woods:B:30,5';
   SPK.ISLAND_CHEST = 'woods:C:26,24';
   SPK.DOUBLE_CHEST = 'hills:C:31,3';     // Double Sparkle, by the windmill
+  SPK.HOLLOW_DOOR = 'ruins:D:45,6';
+  SPK.HOLLOW_FIRE = 'hollow:F:33,13';    // the last campfire, right outside the boss
   function goalAt(id) { var e = SPK.entity(id); return { map: id.split(':')[0], tx: e.tx, ty: e.ty }; }
 
   // The door on fromMap that starts the shortest walk to toMap.
@@ -781,6 +929,9 @@
     if (state.chests.indexOf(SPK.ISLAND_CHEST) < 0) return { key: 'island', at: SPK.ISLAND_CHEST };
     if (!state.powers.hop) return { key: 'cloud', at: 'cloud:P:30,3' };
     if (state.chests.indexOf(SPK.DOUBLE_CHEST) < 0) return { key: 'hills', at: SPK.DOUBLE_CHEST };
+    if (!state.explored.hollow) return { key: 'ruins', at: SPK.HOLLOW_DOOR };
+    if (state.campfires.indexOf(SPK.HOLLOW_FIRE) < 0) return { key: 'hollow', at: SPK.HOLLOW_FIRE };
+    if (!state.bossBeaten) return { key: 'boss', at: 'throne:L:13,2' };
     return { key: 'done', at: null };
   };
   SPK.nextGoal = function (state) {
@@ -797,6 +948,7 @@
     { map: 'woods', tx: 8, ty: 16, emoji: '🦊' },
     { map: 'lake', tx: 3, ty: 13, emoji: '🦦' },
     { map: 'hills', tx: 28, ty: 29, emoji: '🐐' },
+    { map: 'ruins', tx: 25, ty: 17, emoji: '🦝' },
   ];
   var HINTS = {
     mighty: { picture: ['🦄', '➡️', '🕳️', '✨'], text: 'Something magic is in Pebble Cave!' },
@@ -807,7 +959,10 @@
     island: { picture: ['🦄', '🫧', '🌊', '🏝️'], text: 'Walk on the pond to the island!' },
     cloud:  { picture: ['🌊', '🏝️', '🕳️', '☁️'], text: 'A cloud cave hides on the lake island!' },
     hills:  { picture: ['☁️', '🦄', '⛰️', '🎁'], text: 'Hop over the gaps up to the windmill!' },
-    done:   { picture: ['🦄', '💖', '🗺️'], text: 'You did it! Keep exploring!' },
+    ruins:  { picture: ['🌙', '🏛️', '🫧', '🕳️'], text: "Grumpcap's Hollow is in the Moonlight Ruins!" },
+    hollow: { picture: ['🕳️', '💡', '🦄', '🔥'], text: 'Light the campfire deep in the Hollow!' },
+    boss:   { picture: ['🍄', '👑', '✨', '😊'], text: 'King Grumpcap is grumpy! Sparkle him happy!' },
+    done:   { picture: ['🦄', '👑', '🌈', '💖'], text: 'You did it! Keep exploring!' },
   };
   SPK.critterHint = function (state) { return HINTS[SPK.stage(state).key]; };
 
@@ -824,7 +979,7 @@
   SPK.hintDiscovery = function (h, clock) { h.last = clock; h.hidden = false; };
 
   // ── Map screen ───────────────────────────────────────────────────────
-  SPK.MAP_ICON = { meadow: '🌼', woods: '🍄', pebble: '🪨', grotto: '💡', bubble: '🫧', lake: '💎', cloud: '☁️', hills: '🌬️' };
+  SPK.MAP_ICON = { meadow: '🌼', woods: '🍄', pebble: '🪨', grotto: '💡', bubble: '🫧', lake: '💎', cloud: '☁️', hills: '🌬️', ruins: '🌙', hollow: '🕳️', throne: '👑' };
   // What the map screen shows for one map: only things on tiles you've seen.
   SPK.mapMarks = function (state, mapId) {
     var ex = state.explored[mapId], out = [];
@@ -874,7 +1029,7 @@
       v: 1, difficulty: state.difficulty, map: map, x: tx, y: ty, facing: +(state.facing || 0).toFixed(2), hp: hp,
       gems: state.gems, powers: powers, chests: copyList(state.chests), friends: copyList(state.friends),
       heartPieces: copyList(state.heartPieces), campfires: copyList(state.campfires), wakeCampfire: state.wakeCampfire,
-      bossBeaten: !!state.bossBeaten, broken: copyList(state.broken), explored: explored,
+      bossBeaten: !!state.bossBeaten, bossHp: SPK.bossHpNow(state), broken: copyList(state.broken), explored: explored,
       closet: { owned: copyList(state.closet && state.closet.owned), wearing: (state.closet && state.closet.wearing) || {} },
     };
   };
@@ -919,6 +1074,7 @@
     g.chests = copyList(s.chests); g.friends = copyList(s.friends); g.heartPieces = copyList(s.heartPieces);
     g.campfires = copyList(s.campfires); g.broken = copyList(s.broken);
     g.wakeCampfire = s.wakeCampfire; g.bossBeaten = !!s.bossBeaten;
+    g.bossHp = isInt(s.bossHp) ? s.bossHp : null; g.bossHp = SPK.bossHpNow(g); // nonsense: full hearts
     g.hpMax = SPK.hpMaxFor(g); g.hp = Math.min(s.hp, g.hpMax);
     g.explored = {};
     for (var id in s.explored) { var m = SPK.parseMap(id); g.explored[id] = SPK.decodeBits(s.explored[id], m.w * m.h); }
@@ -944,6 +1100,7 @@
     { id: 'crown',   kind: 'accessory', price: 25 },  // a flower crown
     { id: 'cape',    kind: 'accessory', price: 45 },
     { id: 'horn',    kind: 'accessory', price: 70 },  // a sparkly horn
+    { id: 'rainbowCrown', kind: 'accessory', price: null, prize: true }, // King Grumpcap's thank-you
   ];
   function closetItem(id) {
     for (var i = 0; i < SPK.CLOSET.length; i++) if (SPK.CLOSET[i].id === id) return SPK.CLOSET[i];
@@ -959,7 +1116,7 @@
       c.wearing[it.kind] = id;
       return 'wear';
     }
-    if (state.gems < it.price) return 'poor';
+    if (it.prize || state.gems < it.price) return 'poor';
     state.gems -= it.price;
     c.owned.push(id);
     c.wearing[it.kind] = id;
@@ -991,7 +1148,7 @@
       mode: 'intro', difficulty: difficulty, map: 'meadow',
       x: (start.tx + 0.5) * SPK.TILE, y: (start.ty + 0.5) * SPK.TILE, facing: Math.PI / 2,
       hp: d.hp, hpMax: d.hp, gems: 0, powers: {}, chests: [], friends: [], heartPieces: [],
-      campfires: [], wakeCampfire: SPK.HOME_FIRE, bossBeaten: false, broken: [], explored: {},
+      campfires: [], wakeCampfire: SPK.HOME_FIRE, bossBeaten: false, bossHp: null, broken: [], explored: {},
       closet: { owned: [], wearing: { color: null, accessory: null } }, fx: {},
     };
   };
@@ -1204,6 +1361,7 @@
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     if (state.mode === 'intro') { state.mode = 'play'; introLeft = 0; return; }
     if (state.mode === 'reveal') { if (revealT > 1) { state.mode = 'play'; resetInput('reveal'); } return; }
+    if (state.mode === 'celebrate') { if (celebT > 2.5) endCelebration(); return; }
     if (state.mode === 'mapview') { mapTap(e.clientX, e.clientY); return; }
     if (state.mode === 'closet') { closetTap(e.clientX, e.clientY); return; }
     if (speaker && Math.hypot(e.clientX - speaker.x, e.clientY - speaker.y) <= speaker.r + 8) { say(speaker.text); return; }
@@ -1241,6 +1399,7 @@
     e.preventDefault();
     if (state.mode === 'intro') { state.mode = 'play'; return; }
     if (state.mode === 'reveal') { if (revealT > 1) state.mode = 'play'; return; }
+    if (state.mode === 'celebrate') { if (celebT > 2.5) endCelebration(); return; }
     if (!keys[name]) keyPress[name] = true;
     keys[name] = true;
   });
@@ -1268,6 +1427,7 @@
     if (!state.explored[id]) state.explored[id] = new Uint8Array(map.w * map.h);
     bolts = []; pickups = []; parts = []; trail = []; horn.dash = null; hop = null;
     spawnGroups(state.x, state.y);
+    bossSpawn();
   }
   function collideCtx() { return { broken: state.broken, powers: state.powers }; }
   // Enemies never use your powers: no walking on water just because you can.
@@ -1315,7 +1475,7 @@
       return { x: (e.tx + 0.5) * TILE, y: (e.ty + 0.5) * TILE, lit: function () { return state.campfires.indexOf(e.id) >= 0; } };
     });
     map.entities.forEach(function (g, gi) {
-      if (g.kind !== 'S' && g.kind !== 'M' && g.kind !== 'a' && g.kind !== 'f' && g.kind !== 'z') return;
+      if (g.kind !== 'S' && g.kind !== 'M' && g.kind !== 'a' && g.kind !== 'f' && g.kind !== 'z' && g.kind !== 'r') return;
       var cx = (g.tx + 0.5) * TILE, cy = (g.ty + 0.5) * TILE;
       if (Math.hypot(cx - avoidX, cy - avoidY) < 5 * TILE) return; // never pop up right next to you
       var list = g.kind === 'S'
@@ -1323,6 +1483,7 @@
         : g.kind === 'a' ? ['bat', 'bat', 'bat'].slice(0, 2 + gi % 2)
         : g.kind === 'f' ? ['frog', 'frog', 'frog'].slice(0, 2 + gi % 2)
         : g.kind === 'z' ? ['bee', 'bee', 'bee'].slice(0, 2 + gi % 2)
+        : g.kind === 'r' ? ['beetle', 'beetle']
         : ['mushroom', 'mushroom', 'slime'];
       list.forEach(function (kind, i) {
         var a = i * 2.4, rr = i ? TILE * 0.9 : 0;
@@ -1355,9 +1516,12 @@
     else if (Math.random() < 0.10) { var kinds = Object.keys(SPK.POWERUPS); dropPickup(kinds[Math.floor(Math.random() * kinds.length)], e.x, e.y); }
     onEnemyPopped(e);
   }
-  function hurtEnemy(e, n) {
+  function hurtEnemy(e, n, src) {
     if (e.hp <= 0) return;
-    e.hp -= n; e.flash = 0.15;
+    if (e.kind === 'boss') { hurtBoss(e, n); return; }
+    var dmg = SPK.hitDamage(state, e, n, src);
+    if (e.kind === 'beetle' && src === 'horn') { e.flipped = SPK.FLIP_SECS; e.hop = 0; } // bonk! onto its back
+    e.hp -= dmg; e.flash = 0.15;
     if (e.hp <= 0) popEnemy(e); else sfx('bonk');
   }
   function dropPickup(kind, x, y) {
@@ -1373,8 +1537,10 @@
       var dx = state.x - e.x, dy = state.y - e.y, dist = Math.hypot(dx, dy);
       if (dist > ACTIVE_R || active >= MAX_ACTIVE) continue;
       active++;
+      if (e.kind === 'boss') { updateBoss(e, dt, dx, dy, dist); continue; }
       var def = SPK.ENEMIES[e.kind], senses = dist < def.sense * TILE;
       e.t += dt; e.flash = Math.max(0, e.flash - dt); e.squish = Math.max(0, e.squish - dt * 3);
+      if (e.flipped > 0) { e.flipped = Math.max(0, e.flipped - dt); continue; } // wriggling on its back: harmless
       if (def.dive) { updateBat(e, def, d, dx, dy, senses, dt); if (dist < TILE * 0.55) playerHit(SPK.enemyHit(state, def.touch), e.x, e.y); continue; }
       var shot = def.spore || def.spit; // mushrooms puff spores, frogs spit water drops
       if (shot) {
@@ -1396,8 +1562,8 @@
         var ang = senses ? Math.atan2(dy, dx) : Math.random() * Math.PI * 2;
         var spd = def.speed * TILE * d.enemySpeed * (senses ? 1 : 0.5);
         e.vx = Math.cos(ang) * spd; e.vy = Math.sin(ang) * spd;
-        e.hopT = e.kind === 'mushroom' ? 1.2 : 0.55 + Math.random() * 0.5;
-        e.hop = e.kind === 'mushroom' ? 1.0 : 0.35;
+        e.hopT = e.kind === 'mushroom' ? 1.2 : e.kind === 'beetle' ? 1.0 : 0.55 + Math.random() * 0.5;
+        e.hop = e.kind === 'mushroom' ? 1.0 : e.kind === 'beetle' ? 0.85 : 0.35;
         e.squish = 0.5;
       }
       if (e.hop > 0) {
@@ -1450,6 +1616,117 @@
     e.x = res.x; e.y = res.y;
   }
 
+  // ── King Grumpcap ────────────────────────────────────────────────────
+  // He waddles and puffs spore rings (1), calls slimes (2), then bounces and
+  // makes shockwave rings you step away from (3). Every move has a wiggle first.
+  var boss = null, waves = [], crownPick = null, celebT = 0, confetti = [];
+  var BOSS_HOME = { x: 13.5 * TILE, y: 7.5 * TILE };
+  function bossSpawn() {
+    boss = null; waves = []; crownPick = null;
+    if (!map || map.id !== 'throne') return;
+    if (state.bossBeaten) {
+      boss = { happy: true, x: BOSS_HOME.x, y: BOSS_HOME.y, t: 0, z: 0 };
+      if (state.closet.owned.indexOf('rainbowCrown') < 0) crownPick = { x: BOSS_HOME.x, y: BOSS_HOME.y + TILE * 1.7 };
+      return;
+    }
+    boss = { kind: 'boss', x: BOSS_HOME.x, y: BOSS_HOME.y, hp: SPK.bossHpNow(state), t: 0, act: 'walk', at: 0, cd: 2.5, summonCd: 3,
+             flash: 0, wig: 0, z: 0, big: TILE * 0.75 };
+    enemies.push(boss);
+  }
+  function moveBoss(e, mx, my) {
+    var res = SPK.moveAndSlide(map, { x: e.x, y: e.y, r: TILE * 0.8 }, mx, my, enemyCtx());
+    e.x = res.x; e.y = res.y;
+  }
+  function slimesAlive() { var n = 0; enemies.forEach(function (o) { if (o.hp > 0 && o.kind.indexOf('slime') === 0) n++; }); return n; }
+  function updateBoss(e, dt, dx, dy, dist) {
+    var d = SPK.DIFF[state.difficulty], ph = SPK.bossPhase(state);
+    e.t += dt; e.flash = Math.max(0, e.flash - dt); e.phase = ph;
+    if (e.act === 'walk') {
+      var sp = TILE * (ph === 1 ? 0.7 : 0.9) * d.enemySpeed;
+      if (dist > TILE * 1.3) moveBoss(e, dx / dist * sp * dt, dy / dist * sp * dt);
+      e.cd -= dt;
+      if (ph === 2) e.summonCd -= dt;
+      if (ph === 2 && e.summonCd <= 0 && slimesAlive() < 3) { e.act = 'summon'; e.at = 0.9; e.summonCd = 7; }
+      else if (e.cd <= 0) { e.act = ph === 3 ? 'crouch' : 'puff'; e.at = ph === 3 ? 0.7 : 0.8; }
+    } else if (e.act === 'jump') {
+      e.at -= dt;
+      var k = 1 - Math.max(0, e.at) / 0.8;
+      moveBoss(e, e.jx0 + (e.jx1 - e.jx0) * k - e.x, e.jy0 + (e.jy1 - e.jy0) * k - e.y);
+      e.z = Math.sin(Math.min(1, k) * Math.PI) * TILE * 1.6;
+      if (e.at <= 0) {
+        e.z = 0; e.act = 'walk'; e.cd = 2.2 / d.enemyAtk;
+        waves.push({ x: e.x, y: e.y + TILE * 0.4, r: TILE * 0.6, max: TILE * (state.difficulty === 'easy' ? 2.4 : 3.2), hit: false });
+        shake = Math.max(shake, 0.25); sfx('crumble');
+      }
+    } else { // a wiggle before every move, so you always see it coming
+      e.at -= dt; e.wig = 1;
+      if (e.at <= 0) {
+        if (e.act === 'puff') {
+          var n = ph === 1 ? 8 : 10, ssp = 2.2 * TILE * d.bossSpore;
+          for (var i = 0; i < n; i++) {
+            var a = i / n * Math.PI * 2 + e.t;
+            spores.push({ x: e.x, y: e.y - 6, vx: Math.cos(a) * ssp, vy: Math.sin(a) * ssp, life: 4, dmg: 1 });
+          }
+          e.cd = (ph === 1 ? 3 : 3.6) / d.enemyAtk; e.act = 'walk'; sfx('drip');
+        } else if (e.act === 'summon') {
+          for (var j = 0; j < 3; j++) {
+            var sa = j / 3 * Math.PI * 2 + 0.5, sx = e.x + Math.cos(sa) * TILE * 1.7, sy = e.y + Math.sin(sa) * TILE * 1.7;
+            if (SPK.isSolid(map, Math.floor(sx / TILE), Math.floor(sy / TILE), enemyCtx())) { sx = e.x; sy = e.y + TILE; }
+            spawnEnemy('slime', sx, sy, null); burst(sx, sy, 8, ['#4ade80', '#f472b6', '#ffffff'], 60);
+          }
+          e.cd = 2; e.act = 'walk'; sfx('pop');
+        } else { // crouch -> jump at where you are
+          e.act = 'jump'; e.at = 0.8; e.jx0 = e.x; e.jy0 = e.y; e.jx1 = state.x; e.jy1 = state.y; sfx('hop');
+        }
+      }
+    }
+    e.wig = Math.max(0, e.wig - dt * 3);
+    if (e.z < TILE * 0.5 && dist < TILE * 1.15) playerHit(SPK.enemyHit(state, 1), e.x, e.y);
+  }
+  function hurtBoss(e, n) {
+    var r = SPK.bossHit(state, n, now());
+    if (!r || r === 'immune') return;
+    e.hp = SPK.bossHpNow(state); e.flash = 0.2;
+    sfx('bonk'); burst(e.x, e.y - 24, 8, ['#fde047', '#f9a8d4', '#ffffff'], 80);
+    if (r === 'beaten') bossHappy(e);
+  }
+  // Beaten, he turns happy: everything in the room pops into confetti and he drops the Rainbow Crown.
+  function bossHappy(e) {
+    e.hp = 0;
+    enemies.forEach(function (o) { if (o !== e && o.hp > 0) { o.hp = 0; popEnemy(o); } });
+    spores = []; waves = [];
+    boss = { happy: true, x: e.x, y: e.y, t: 0, z: 0 };
+    crownPick = { x: e.x, y: Math.min(e.y + TILE * 1.7, (map.h - 3.5) * TILE) };
+    hitPause = 0.3; shake = 0.3;
+    burst(e.x, e.y - 20, 70, RAINBOW.concat(['#ffffff']), 240);
+    sfx('fanfare'); onDiscovery();
+  }
+  function updateBossRoom(dt) {
+    if (boss && boss.happy) boss.t += dt;
+    var d = SPK.DIFF[state.difficulty];
+    for (var i = waves.length - 1; i >= 0; i--) {
+      var w = waves[i];
+      w.r += TILE * 3.2 * dt;
+      if (!w.hit && !hop && Math.abs(Math.hypot(state.x - w.x, state.y - w.y) - w.r) < TILE * 0.35) { w.hit = true; playerHit(SPK.enemyHit(state, 1), w.x, w.y); }
+      if (w.r >= w.max) waves.splice(i, 1);
+    }
+    if (crownPick && Math.hypot(crownPick.x - state.x, crownPick.y - state.y) < TILE * 0.9 && SPK.takeCrown(state)) {
+      crownPick = null;
+      startCelebration();
+    }
+  }
+  function startCelebration() {
+    state.mode = 'celebrate'; celebT = 0; confetti = [];
+    resetInput('celebrate'); sfx('fanfare');
+  }
+  // Afterwards you go home, where every friend you found is waiting under a rainbow sky.
+  function endCelebration() {
+    state.mode = 'play';
+    var at = SPK.besideFire(SPK.HOME_FIRE);
+    fade = { t: 0, dur: 0.6, swapped: false, swap: function () { teleport(at.map, at.tx, at.ty); } };
+    resetInput('celebrate');
+  }
+
   function aimAngle() {
     var tgt = SPK.pickTarget(state.x, state.y, state.facing, enemies, 7 * TILE, 120);
     return tgt ? Math.atan2(tgt.y - state.y, tgt.x - state.x) : state.facing;
@@ -1485,7 +1762,7 @@
       }
       for (var j = 0; j < enemies.length; j++) {
         var e = enemies[j];
-        if (e.hp > 0 && Math.hypot(e.x - b.x, e.y - b.y) < TILE * (b.dmg > 1 ? 0.65 : 0.5)) { hurtEnemy(e, b.dmg); bolts.splice(i, 1); break; }
+        if (e.hp > 0 && Math.hypot(e.x - b.x, e.y - b.y) < TILE * (b.dmg > 1 ? 0.65 : 0.5) + (e.big || 0)) { hurtEnemy(e, b.dmg, 'magic'); bolts.splice(i, 1); break; }
       }
     }
   }
@@ -1509,7 +1786,7 @@
     burst(state.x, state.y, 1, ['#f0abfc', '#ffffff'], 20);
     for (var i = 0; i < enemies.length; i++) {
       var e = enemies[i];
-      if (e.hp > 0 && h.hit.indexOf(e) < 0 && Math.hypot(e.x - state.x, e.y - state.y) < TILE * hs.radius) { h.hit.push(e); hurtEnemy(e, hs.dmg); }
+      if (e.hp > 0 && h.hit.indexOf(e) < 0 && Math.hypot(e.x - state.x, e.y - state.y) < TILE * hs.radius + (e.big || 0)) { h.hit.push(e); hurtEnemy(e, hs.dmg, 'horn'); }
     }
     if (h.mega) burst(state.x, state.y, 3, ['#fb7185', '#fde047', '#ffffff'], 140);
     if (h.t >= h.dur) horn.dash = null;
@@ -1725,10 +2002,13 @@
     // two rows: colors, then accessories; each cell shows you wearing it
     var aL = L, aT = T + 62, aR = R - 74, aB = B;
     var rows = [['plain', 'mint', 'galaxy', 'rainbow'], ['bare', 'crown', 'cape', 'horn']];
-    var cell = Math.min((aR - aL) / 4, (aB - aT) / 2, 140);
-    var ox = (aL + aR) / 2 - cell * 2, oy = (aT + aB) / 2 - cell;
+    if (state.closet.owned.indexOf('rainbowCrown') >= 0) rows[1].push('rainbowCrown');
+    var cols = rows[1].length;
+    var cell = Math.min((aR - aL) / cols, (aB - aT) / 2, 140);
+    var oy = (aT + aB) / 2 - cell;
     var wear = state.closet.wearing;
     rows.forEach(function (row, ri) {
+      var ox = (aL + aR) / 2 - cell * row.length / 2;
       row.forEach(function (id, ci) {
         var cx = ox + (ci + 0.5) * cell, cy = oy + (ri + 0.45) * cell, rr = cell * 0.36;
         var it = SPK.CLOSET.filter(function (i) { return i.id === id; })[0];
@@ -1945,7 +2225,7 @@
       e.rbCd = Math.max(0, (e.rbCd || 0) - dt);
       if (e.hp <= 0 || e.rbCd > 0) continue;
       for (var k = 0; k < trail.length; k++) {
-        if (Math.hypot(trail[k].x - e.x, trail[k].y - e.y) < TILE * 0.5) { e.rbCd = 0.5; hurtEnemy(e, 1); break; }
+        if (Math.hypot(trail[k].x - e.x, trail[k].y - e.y) < TILE * 0.5) { e.rbCd = 0.5; hurtEnemy(e, 1, 'trail'); break; }
       }
     }
   }
@@ -1976,7 +2256,7 @@
         if (e.hp > 0 && Math.hypot(e.x - orbs[i].x, e.y - orbs[i].y) < TILE * 0.55) {
           SPK.swirlHit(state);
           burst(orbs[i].x, orbs[i].y, 12, ['#c4b5fd', '#f0abfc', '#ffffff'], 90);
-          hurtEnemy(e, 2);
+          hurtEnemy(e, 2, 'swirl');
           return; // one orb per frame; positions re-spread next frame
         }
       }
@@ -2169,6 +2449,9 @@
     lake:   { step: 0.34, notes: [587, 698, 880, 698, 659, 784, 988, 784, 587, 698, 880, 1175, 1047, 880, 784, 659], bass: [294, 294, 262, 262, 233, 233, 262, 262] },
     hills:  { step: 0.28, notes: [659, 784, 880, 784, 659, 587, 523, 587, 659, 784, 988, 880, 784, 659, 587, 523], bass: [330, 330, 294, 294, 262, 262, 294, 294] },
     cloud:  { step: 0.44, notes: [784, 988, 1175, 988, 880, 1047, 1319, 1047, 784, 988, 1175, 1568, 1319, 1175, 988, 880], bass: [392, 392, 349, 349, 330, 330, 349, 349] },
+    ruins:  { step: 0.4,  notes: [440, 523, 659, 784, 659, 523, 587, 494, 440, 523, 659, 880, 784, 659, 587, 523], bass: [220, 220, 175, 175, 196, 196, 165, 165] },
+    hollow: { step: 0.46, notes: [330, 392, 494, 392, 349, 440, 523, 440, 330, 392, 494, 587, 523, 494, 440, 392], bass: [165, 165, 147, 147, 131, 131, 147, 147] },
+    throne: { step: 0.22, notes: [392, 466, 523, 466, 392, 349, 392, 523, 587, 523, 466, 392, 349, 392, 466, 392], bass: [196, 196, 175, 175, 156, 156, 175, 175] },
     cave:   { step: 0.42, notes: [440, 523, 659, 523, 494, 587, 698, 587, 440, 523, 659, 880, 784, 659, 523, 494], bass: [220, 220, 175, 175, 220, 220, 165, 165] },
   };
   var music = { song: null, i: 0, next: 0 };
@@ -2223,6 +2506,7 @@
       return;
     }
     if (state.mode === 'reveal') { revealT += dt; updatePickups(dt); return; }
+    if (state.mode === 'celebrate') { celebT += dt; return; }
     if (state.mode === 'mapview' || state.mode === 'closet') return; // the world waits
     if (state.mode !== 'play') return;
     if (hitPause > 0) { hitPause -= dt; return; }
@@ -2265,6 +2549,8 @@
     updateHorn(dt);
     updateMagic(dt);
     updateEnemies(dt);
+    updateBossRoom(dt);
+    if (state.mode !== 'play') return; // the crown starts the celebration
     updateSwirl();
     updateRainbow(dt);
     updatePickups(dt);
@@ -2344,6 +2630,9 @@
     lake:   { grass: ['#8fdc8a', '#86d483', '#71c070'], tree: ['#2a8f5c', '#33996a'] },
     hills:  { grass: ['#a6d96a', '#9dd162', '#86bd4f'], tree: ['#3f8f3a', '#4b9b42'] },
     cloud:  { floor: ['#eef2ff', '#e6ebff', '#c7d2fe'], wall: ['#a5b4fc', '#818cf8'] },
+    ruins:  { grass: ['#97a8d8', '#8fa0d0', '#7b8cc2'], tree: ['#3f5394', '#4a5fa3'], path: ['#dcdcee', '#b6b6d2'] },
+    hollow: { floor: ['#4c3a5e', '#47365a', '#5e4a72'], wall: ['#2a1d38', '#1c1328'] },
+    throne: { floor: ['#6b4f7a', '#664a75', '#7d5f8c'], wall: ['#3b2650', '#2a1a3a'] },
   };
   function theme() { return THEMES[map.theme] || THEMES.meadow; }
   function ground(c, ch, x, y, cave) {
@@ -2371,6 +2660,12 @@
         }
         break;
       case ':': case '>':
+        if (theme().path) { // old flagstones
+          c.fillStyle = theme().path[0]; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
+          c.strokeStyle = theme().path[1]; c.lineWidth = 1.5;
+          c.strokeRect(1, 1, 14, 14); c.strokeRect(17, 1, 14, 14); c.strokeRect(1 + (y % 2) * 8, 17, 14, 14); c.strokeRect(17 + (y % 2) * 8, 17, 14, 14);
+          break;
+        }
         c.fillStyle = '#ecd9a8'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
         c.fillStyle = '#dcc590'; c.beginPath(); c.arc(6 + r * 20, 8 + r * 14, 2, 0, 7); c.fill();
         break;
@@ -2390,6 +2685,12 @@
         if (r > 0.6) { c.fillStyle = '#f9a8d4'; c.beginPath(); c.arc(12, 13, 3.5, 0, 7); c.fill(); c.fillStyle = '#fde047'; c.beginPath(); c.arc(12, 13, 1.3, 0, 7); c.fill(); }
         break;
       case 'v': // a gap in the ground: sky and clouds far below
+        if (cave && map.theme !== 'cloud') { // a deep chasm, with far-off sparkles
+          c.fillStyle = '#120a1c'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
+          c.fillStyle = 'rgba(196,181,253,.7)'; c.fillRect(6 + r * 18, 10 + r * 12, 2, 2); c.fillRect(20 - r * 10, 22 - r * 8, 1.5, 1.5);
+          if (SPK.tileAt(map, x, y - 1) !== 'v') { c.fillStyle = theme().wall[0]; c.fillRect(-0.5, -0.5, TILE + 1, 6); }
+          break;
+        }
         c.fillStyle = cave ? '#c7d2fe' : '#bfe6ff'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
         c.fillStyle = 'rgba(255,255,255,.85)';
         c.beginPath(); c.arc(6 + r * 18, 12 + r * 10, 5, 0, 7); c.arc(11 + r * 18, 10 + r * 10, 6, 0, 7); c.arc(16 + r * 18, 13 + r * 10, 4.5, 0, 7); c.fill();
@@ -2408,6 +2709,12 @@
         c.beginPath(); c.moveTo(10, 8); c.lineTo(15, 16); c.lineTo(11, 22); c.moveTo(15, 16); c.lineTo(22, 19); c.stroke();
         break;
       case 'D':
+        if (cave) { // the big door to King Grumpcap
+          c.fillStyle = theme().wall[0]; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
+          c.fillStyle = '#facc15'; c.beginPath(); c.arc(16, 18, 15, Math.PI, 0); c.lineTo(31, 32); c.lineTo(1, 32); c.fill();
+          c.fillStyle = '#0c0614'; c.beginPath(); c.arc(16, 18, 12, Math.PI, 0); c.lineTo(28, 32); c.lineTo(4, 32); c.fill();
+          break;
+        }
         c.fillStyle = '#a8a29e'; c.fillRect(-0.5, -0.5, TILE + 1, TILE + 1);
         c.fillStyle = '#1c1917'; c.beginPath(); c.arc(16, 18, 13, Math.PI, 0); c.lineTo(29, 32); c.lineTo(3, 32); c.fill();
         break;
@@ -2428,7 +2735,7 @@
         ground(c, ch, x, y, cave);
     }
   }
-  var ON_FLOOR = { F: 1, C: 1, H: 1, S: 1, M: 1, P: 1, '@': 1, '*': 1, L: 1, a: 1, W: 1, f: 1, z: 1 };
+  var ON_FLOOR = { F: 1, C: 1, H: 1, S: 1, M: 1, P: 1, '@': 1, '*': 1, L: 1, a: 1, W: 1, f: 1, z: 1, r: 1 };
   function floorChar(ch) { return ON_FLOOR[ch] ? map.floor : ch; }
   function chunkRes() { return Math.min(3, Math.max(1, scale * DPR)); }
   function getChunk(cx, cy) {
@@ -2567,6 +2874,15 @@
       }
       ctx.fillStyle = '#92400e'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, 7); ctx.fill();
       ctx.restore();
+    } else if (map.theme === 'ruins') { // the moon statue
+      ctx.fillStyle = '#b6b6d2'; ctx.fillRect(x - 15, y - 2, 30, 16); ctx.fillStyle = '#9b9bbd'; ctx.fillRect(x - 18, y + 10, 36, 6);
+      ctx.fillStyle = 'rgba(254,249,195,' + (0.28 + 0.1 * Math.sin(clock * 1.5)) + ')';
+      ctx.beginPath(); ctx.arc(x, y - TILE * 0.9, TILE * 1.15, 0, 7); ctx.fill();
+      emoji('🌙', x, y - TILE * 0.9, TILE * 1.7);
+    } else if (map.theme === 'throne') { // King Grumpcap's big chair
+      ctx.fillStyle = '#7c3aed'; roundRect(x - 26, y - 44, 52, 54, 10); ctx.fill();
+      ctx.fillStyle = '#facc15'; ctx.fillRect(x - 30, y + 2, 60, 12); ctx.fillRect(x - 30, y - 18, 8, 22); ctx.fillRect(x + 22, y - 18, 8, 22);
+      ctx.fillStyle = '#c4b5fd'; roundRect(x - 18, y - 36, 36, 34, 8); ctx.fill();
     } else emoji('🍄', x, y - TILE * 0.55, TILE * 2.2);
   }
 
@@ -2635,6 +2951,8 @@
         ctx.fillStyle = fc[i]; ctx.beginPath(); ctx.arc(fx, fy, s * 0.075, 0, 7); ctx.fill();
         ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(fx, fy, s * 0.03, 0, 7); ctx.fill();
       }
+    } else if (acc === 'rainbowCrown') {
+      ctx.save(); ctx.translate(-s * 0.02, -s * 0.4); drawRainbowCrown(s * 0.62); ctx.restore();
     } else if (acc === 'horn') {
       var hx = -s * 0.28, hy = -s * 0.42;
       ctx.fillStyle = 'rgba(253,224,71,' + (0.35 + 0.15 * Math.sin(clock * 4)) + ')';
@@ -2695,6 +3013,96 @@
     emoji(e.kind === 'bee' ? '🐝' : '🦇', 0, 0, TILE * (e.kind === 'bee' ? 0.7 : 0.75));
     ctx.restore();
   }
+  function drawBeetle(e) {
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 9, 13, 4, 0, 0, 7); ctx.fill();
+    ctx.save(); ctx.translate(e.x, e.y);
+    ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 2;
+    if (e.flipped > 0) { // on its back, legs wiggling, a bit dizzy
+      ctx.beginPath();
+      for (var i = 0; i < 3; i++) {
+        var w = Math.sin(e.t * 22 + i) * 3;
+        ctx.moveTo(-6 + i * 6, -4); ctx.lineTo(-8 + i * 7 + w, -13);
+      }
+      ctx.stroke();
+      ctx.fillStyle = e.flash > 0 ? '#fff' : '#d6d3d1'; ctx.beginPath(); ctx.ellipse(0, 0, 12, 8, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#a8a29e'; ctx.fillRect(-1, -6, 2, 12);
+      emoji('💫', 0, -20, TILE * 0.42);
+    } else {
+      ctx.beginPath();
+      for (var j = 0; j < 3; j++) {
+        var lw = Math.sin(e.t * 14 + j * 2) * 2;
+        ctx.moveTo(-9, -3 + j * 5); ctx.lineTo(-15, -1 + j * 5 + lw); ctx.moveTo(9, -3 + j * 5); ctx.lineTo(15, -1 + j * 5 - lw);
+      }
+      ctx.stroke();
+      ctx.fillStyle = '#1e293b'; ctx.beginPath(); ctx.arc(0, 9, 5.5, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillRect(-3, 9, 2, 2); ctx.fillRect(1, 9, 2, 2);
+      ctx.fillStyle = e.flash > 0 ? '#fff' : '#64748b'; ctx.beginPath(); ctx.ellipse(0, -1, 12, 10, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#334155'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(0, 9); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.beginPath(); ctx.ellipse(-5, -5, 3.5, 2, -0.5, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
+  var BOSS_CAPS = { 1: '#ef4444', 2: '#a855f7', 3: '#f97316' };
+  function drawBoss(e) {
+    var happy = !!e.happy, wig = e.wig || 0, s = 1;
+    ctx.fillStyle = 'rgba(0,0,0,' + (e.z ? 0.12 : 0.22) + ')';
+    ctx.beginPath(); ctx.ellipse(e.x, e.y + TILE * 0.75, TILE * (1.1 - (e.z || 0) / TILE * 0.2), TILE * 0.3, 0, 0, 7); ctx.fill();
+    ctx.save(); ctx.translate(e.x, e.y - (e.z || 0) - (happy ? Math.abs(Math.sin(e.t * 4)) * 6 : 0));
+    ctx.rotate(Math.sin(e.t * 30) * 0.09 * wig);
+    var squash = e.act === 'crouch' ? 0.85 : 1; ctx.scale(1 / squash, squash);
+    var white = e.flash > 0;
+    // stem and face
+    ctx.fillStyle = white ? '#fff' : '#fde7c8'; roundRect(-20 * s, -6, 40 * s, 34, 12); ctx.fill();
+    ctx.fillStyle = '#1f2937';
+    ctx.beginPath(); ctx.arc(-8, 8, 3, 0, 7); ctx.arc(8, 8, 3, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 2.5; ctx.beginPath();
+    if (happy) { ctx.arc(0, 15, 7, 0.2, Math.PI - 0.2); }
+    else { ctx.moveTo(-13, 1); ctx.lineTo(-4, 5); ctx.moveTo(13, 1); ctx.lineTo(4, 5); ctx.moveTo(-6, 21); ctx.quadraticCurveTo(0, 15, 6, 21); }
+    ctx.stroke();
+    if (happy) { ctx.fillStyle = 'rgba(244,114,182,.6)'; ctx.beginPath(); ctx.arc(-14, 14, 4, 0, 7); ctx.arc(14, 14, 4, 0, 7); ctx.fill(); }
+    // the cap changes color with each phase (pink once he's happy)
+    ctx.fillStyle = white ? '#fff' : happy ? '#f472b6' : BOSS_CAPS[e.phase || 1];
+    ctx.beginPath(); ctx.arc(0, -4, 38, Math.PI, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff';
+    [[-20, -15, 6.5], [2, -28, 6], [22, -13, 5.5], [-3, -11, 3.5]].forEach(function (p) { ctx.beginPath(); ctx.arc(p[0], p[1], p[2], 0, 7); ctx.fill(); });
+    // his crown
+    ctx.fillStyle = '#facc15'; ctx.beginPath();
+    ctx.moveTo(-14, -38); ctx.lineTo(-14, -52); ctx.lineTo(-7, -44); ctx.lineTo(0, -56); ctx.lineTo(7, -44); ctx.lineTo(14, -52); ctx.lineTo(14, -38); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(0, -44, 2.5, 0, 7); ctx.fill();
+    ctx.restore();
+    if (happy && Math.floor(e.t * 1.5) % 3 === 0) emoji('💖', e.x + 30, e.y - 50 - (e.t * 30) % 20, TILE * 0.45);
+  }
+  function drawBossRoom() {
+    if (boss && boss.happy) drawBoss(boss);
+    if (boss && !boss.happy && boss.act === 'jump') { // where he'll land
+      var k = 1 - Math.max(0, boss.at) / 0.8;
+      ctx.fillStyle = 'rgba(124,58,237,' + (0.15 + 0.25 * k) + ')';
+      ctx.beginPath(); ctx.ellipse(boss.jx1, boss.jy1 + TILE * 0.5, TILE * (0.6 + 0.6 * k), TILE * (0.25 + 0.2 * k), 0, 0, 7); ctx.fill();
+    }
+    waves.forEach(function (w) {
+      ctx.globalAlpha = Math.max(0, 1 - w.r / w.max) * 0.9 + 0.1;
+      ctx.strokeStyle = '#fb923c'; ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.ellipse(w.x, w.y, w.r, w.r * 0.8, 0, 0, 7); ctx.stroke();
+      ctx.strokeStyle = '#fde68a'; ctx.lineWidth = 3; ctx.stroke();
+      ctx.globalAlpha = 1;
+    });
+    if (crownPick) {
+      ctx.fillStyle = 'rgba(253,224,71,' + (0.3 + 0.15 * Math.sin(clock * 4)) + ')';
+      ctx.beginPath(); ctx.arc(crownPick.x, crownPick.y - 8, TILE * 0.7, 0, 7); ctx.fill();
+      ctx.save(); ctx.translate(crownPick.x, crownPick.y - 8 + Math.sin(clock * 3) * 3); drawRainbowCrown(TILE * 1.6); ctx.restore();
+    }
+  }
+  // The Rainbow Crown, centred on 0,0 at size s.
+  function drawRainbowCrown(s) {
+    ctx.fillStyle = '#facc15'; ctx.strokeStyle = '#b45309'; ctx.lineWidth = Math.max(1, s * 0.03);
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.3, s * 0.12); ctx.lineTo(-s * 0.3, -s * 0.12); ctx.lineTo(-s * 0.15, s * 0.0); ctx.lineTo(0, -s * 0.2);
+    ctx.lineTo(s * 0.15, s * 0.0); ctx.lineTo(s * 0.3, -s * 0.12); ctx.lineTo(s * 0.3, s * 0.12); ctx.closePath(); ctx.fill(); ctx.stroke();
+    for (var i = 0; i < 5; i++) {
+      ctx.fillStyle = RAINBOW[i % RAINBOW.length];
+      ctx.beginPath(); ctx.arc(-s * 0.22 + i * s * 0.11, s * 0.05, s * 0.035, 0, 7); ctx.fill();
+    }
+  }
   function drawCombat() {
     pickups.forEach(function (p) {
       var bob = p.z + Math.sin(p.t * 5) * 1.5;
@@ -2715,12 +3123,14 @@
     if (horn.dash && horn.dash.mega) {
       ctx.fillStyle = 'rgba(251,113,133,.25)'; ctx.beginPath(); ctx.arc(state.x, state.y, TILE * 1.9, 0, 7); ctx.fill();
     }
+    drawBossRoom();
     var list = enemies.slice().sort(function (a, b) { return a.y - b.y; });
     var drewPlayer = false;
     for (var i = 0; i < list.length; i++) {
       if (!drewPlayer && list[i].y > state.y) { drawPlayer(); drewPlayer = true; }
       var k = list[i].kind;
-      if (k === 'mushroom') drawMushroom(list[i]); else if (k === 'bat' || k === 'bee') drawBat(list[i]); else if (k === 'frog') drawFrog(list[i]); else drawSlime(list[i]);
+      if (k === 'mushroom') drawMushroom(list[i]); else if (k === 'bat' || k === 'bee') drawBat(list[i]); else if (k === 'frog') drawFrog(list[i]);
+      else if (k === 'beetle') drawBeetle(list[i]); else if (k === 'boss') drawBoss(list[i]); else drawSlime(list[i]);
     }
     if (!drewPlayer) drawPlayer();
     drawSwirl();
@@ -2776,6 +3186,54 @@
     ctx.fillStyle = '#5b21b6'; ctx.font = '700 ' + Math.round(s * 0.75) + 'px Fredoka, ui-rounded, system-ui, sans-serif';
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillText(String(state.gems), x + s + 4, gy + s / 2 + 1);
+  }
+
+  // King Grumpcap's hearts: a row of big hearts at the top, never a number.
+  function drawBossHearts() {
+    if (!boss || boss.happy) return;
+    var ins = insets(), n = 6, max = SPK.bossMax(state), hp = SPK.bossHpNow(state), per = max / n;
+    var s = Math.max(24, Math.min(34, W / 18)), gap = 4, w = n * (s + gap) + s;
+    var x = W / 2 - w / 2, y = ins.t + 14;
+    ctx.fillStyle = 'rgba(46,16,101,.55)'; roundRect(x - 8, y - 6, w + 16, s + 12, (s + 12) / 2); ctx.fill();
+    emoji('👑', x + s / 2, y + s / 2, s * 0.85);
+    for (var i = 0; i < n; i++) {
+      var f = Math.max(0, Math.min(1, (hp - i * per) / per));
+      drawHeart(x + s + gap + i * (s + gap), y, s, f >= 1 ? 1 : f > 0 ? 0.5 : 0);
+    }
+  }
+  // After the boss, the sky outside stays rainbow.
+  function drawRainbowSky() {
+    var cx = W / 2, cy = H * 1.35, R0 = cy - H * 0.06, band = Math.max(6, H * 0.018);
+    ctx.save(); ctx.globalAlpha = 0.3; ctx.lineWidth = band;
+    RAINBOW.forEach(function (c, i) { ctx.strokeStyle = c; ctx.beginPath(); ctx.arc(cx, cy, R0 - i * band, Math.PI, 0); ctx.stroke(); });
+    ctx.restore();
+  }
+  function drawCelebrate() {
+    var m = Math.min(W, H), t = celebT;
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#bae6fd'); g.addColorStop(1, '#fbcfe8');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    var band = m * 0.035, R0 = m * 0.62 * Math.min(1, t * 1.2);
+    RAINBOW.forEach(function (c, i) { ctx.strokeStyle = c; ctx.lineWidth = band; ctx.beginPath(); ctx.arc(W / 2, H * 0.78, Math.max(1, R0 - i * band), Math.PI, 0); ctx.stroke(); });
+    // confetti
+    if (confetti.length < 90) confetti.push({ x: Math.random() * W, y: -10, vy: 60 + Math.random() * 90, vx: (Math.random() - 0.5) * 40, c: RAINBOW[Math.floor(Math.random() * RAINBOW.length)], a: Math.random() * 6 });
+    confetti.forEach(function (p) { p.y += p.vy / 60; p.x += p.vx / 60; p.a += 0.1; if (p.y > H + 10) { p.y = -10; p.x = Math.random() * W; } });
+    confetti.forEach(function (p) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.fillStyle = p.c; ctx.fillRect(-4, -2, 8, 4); ctx.restore(); });
+    // you, wearing the crown, and King Grumpcap, happy now
+    ctx.save(); ctx.translate(W / 2, H * 0.5 - Math.abs(Math.sin(t * 4)) * m * 0.03); ctx.scale(-1, 1);
+    drawUnicorn(m * 0.3, state.closet.wearing); ctx.restore();
+    ctx.save(); ctx.translate(W / 2 + m * 0.38, H * 0.55); ctx.scale(m / 420, m / 420);
+    drawBoss({ happy: true, x: 0, y: 0, t: t, z: 0 }); ctx.restore();
+    // every friend you found comes to dance
+    var fr = state.friends.map(function (id) { return SPK.FRIENDS[id]; }).filter(Boolean), n = fr.length;
+    fr.forEach(function (f, i) {
+      var x = W / 2 + (i - (n - 1) / 2) * Math.min(m * 0.11, (W - 40) / Math.max(1, n));
+      emoji(f.emoji, x, H * 0.8 - Math.abs(Math.sin(t * 5 + i)) * m * 0.04, m * 0.09);
+    });
+    ctx.fillStyle = '#5b21b6'; ctx.font = '700 ' + Math.round(Math.max(16, m * 0.055)) + 'px Fredoka, ui-rounded, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🎉 You made King Grumpcap happy! 🎉', W / 2, H * 0.14);
+    if (t > 2.5) emoji('👆', W / 2, H * 0.92 + Math.sin(clock * 5) * 3, m * 0.07);
   }
 
   // Dark caves: one reusable mask canvas, with soft holes cut for the
@@ -2836,8 +3294,10 @@
       g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
+    if (state.bossBeaten && !map.cave) drawRainbowSky();
     speaker = null;
-    if (state.mode === 'play') { drawBubble(); drawHUD(); drawPowerTimers(); drawControls(); }
+    if (state.mode === 'play') { drawBubble(); drawHUD(); drawBossHearts(); drawPowerTimers(); drawControls(); }
+    if (state.mode === 'celebrate') drawCelebrate();
     if (state.mode === 'sleepy') drawSleepy();
     if (state.mode === 'reveal') drawReveal();
     if (state.mode === 'mapview') drawMapView();
@@ -2879,6 +3339,8 @@
     mapHits: function () { return mapUI ? mapUI.hits.map(function (h) { return { x: h.x, y: h.y, r: h.r, act: h.act, id: h.id || null }; }) : []; },
     _give: function (kind) { if (SPK.POWERUPS[kind]) SPK.grantPowerup(state, kind, now()); else state.powers[kind] = true; },
     get enemies() { return enemies.length; },
+    get boss() { return boss ? { happy: !!boss.happy, hp: boss.hp, act: boss.act || null, phase: boss.phase || null, x: boss.x, y: boss.y } : null; },
+    get crown() { return crownPick ? { x: crownPick.x, y: crownPick.y } : null; },
     get hint() { return trailOn(); },
   };
 

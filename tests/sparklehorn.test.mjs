@@ -206,7 +206,7 @@ test('layout: buttons do not overlap each other or the arcade menu corner', () =
 });
 
 // ── Task 4: maps & collision ────────────────────────────────────────────
-const REAL_MAPS = ['meadow', 'pebble', 'woods', 'grotto', 'bubble', 'lake', 'cloud', 'hills'];
+const REAL_MAPS = ['meadow', 'pebble', 'woods', 'grotto', 'bubble', 'lake', 'cloud', 'hills', 'ruins', 'hollow', 'throne'];
 
 test('maps parse with consistent widths', () => {
   for (const id of REAL_MAPS) {
@@ -833,7 +833,7 @@ test('a slice-1 save still loads and points to the woods', () => {
 });
 
 test('the critters have a different picture hint at every stage', () => {
-  assert.deepEqual([...SPK.CRITTERS.map((c) => c.map)].sort(), ['hills', 'lake', 'meadow', 'woods']);
+  assert.deepEqual([...SPK.CRITTERS.map((c) => c.map)].sort(), ['hills', 'lake', 'meadow', 'ruins', 'woods']);
   for (const c of SPK.CRITTERS) assert.ok(!SPK.isSolid(SPK.parseMap(c.map), c.tx, c.ty, null), `${c.emoji} stands on open ground`);
   const g = SPK.createGame('easy');
   const seen = new Set();
@@ -905,7 +905,7 @@ test('big sparkle is a chest upgrade that makes bolts do 2', () => {
 test('every star friend spot has a friend, and every friend has a spot', () => {
   const spots = [];
   for (const id of REAL_MAPS) for (const e of SPK.parseMap(id).entities) if (e.kind === '*') spots.push(e.id);
-  assert.equal(spots.length, 10);
+  assert.equal(spots.length, 12);
   for (const id of spots) assert.ok(SPK.FRIENDS[id] && SPK.FRIENDS[id].emoji && SPK.FRIENDS[id].name, `${id} has a friend`);
   for (const id of Object.keys(SPK.FRIENDS)) assert.ok(spots.includes(id), `${id} is on a map`);
   const meadow = SPK.parseMap('meadow');
@@ -929,8 +929,8 @@ test('the friends book lists every friend in a fixed order with found flags', ()
   const ids = Object.keys(SPK.FRIENDS);
   SPK.meetFriend(g, ids[2]);
   const book = SPK.friendsBook(g);
-  assert.equal(book.length, 10);
-  assert.deepEqual(book.map((b) => b.found), [false, false, true, false, false, false, false, false, false, false]);
+  assert.equal(book.length, 12);
+  assert.deepEqual(book.map((b) => b.found), [false, false, true, false, false, false, false, false, false, false, false, false]);
   assert.equal(book[2].emoji, SPK.FRIENDS[ids[2]].emoji);
 });
 
@@ -1168,8 +1168,7 @@ test('nextGoal walks the slice 3 chain: lake, cloud cave, hills, then rests', ()
   g.map = 'hills';
   assert.equal(tileOf(SPK.nextGoal(g)), 'hills:31,3', 'the chest by the windmill');
   SPK.openChest(g, 'hills:C:31,3');
-  assert.equal(SPK.stage(g).key, 'done');
-  assert.equal(SPK.nextGoal(g), null);
+  assert.equal(SPK.stage(g).key, 'ruins', 'then on to the Moonlight Ruins');
 });
 
 test('a slice-2 save that finished the woods loads and points to the lake', () => {
@@ -1182,12 +1181,12 @@ test('a slice-2 save that finished the woods loads and points to the lake', () =
   assert.equal(tileOf(SPK.nextGoal(loaded)), 'woods:55,14');
 });
 
-test('ten star friends and ten heart pieces exist so far', () => {
-  assert.equal(Object.keys(SPK.FRIENDS).length, 10);
+test('all twelve star friends and twelve heart pieces exist', () => {
+  assert.equal(Object.keys(SPK.FRIENDS).length, 12);
   let hearts = 0;
   for (const id of REAL_MAPS) hearts += SPK.parseMap(id).entities.filter((e) => e.kind === 'H').length;
   hearts += Object.values(SPK.CHESTS).filter((c) => c.heartPiece).length;
-  assert.equal(hearts, 10);
+  assert.equal(hearts, 12, 'twelve pieces: three whole extra hearts');
 });
 
 // ── Slice 3, Task 4: the Unicorn Closet ─────────────────────────────────
@@ -1196,6 +1195,7 @@ test('the closet sells three colors and three accessories at the planned prices'
   assert.deepEqual(p, {
     mint: ['color', 30], galaxy: ['color', 60], rainbow: ['color', 100],
     crown: ['accessory', 25], cape: ['accessory', 45], horn: ['accessory', 70],
+    rainbowCrown: ['accessory', null], // the boss's prize, never for sale
   });
   const m = SPK.parseMap('meadow');
   assert.equal(SPK.entity('meadow:W:10,17').kind, 'W', 'the wardrobe stands by the home campfire');
@@ -1300,4 +1300,178 @@ test('tapping the world and the floating joystick still work next to the d-pad',
   inp.move(4, p.x, p.y + 60, 320);
   const v = inp.moveVec();
   assert.ok(near(v.x, -1) && near(v.y, 0), 'the d-pad wins over a second finger on the joystick');
+});
+
+// ── Slice 4, Task 2: Moonlight Ruins, Grumpcap's Hollow, the throne room ─
+const ALL = { bubble: true, hop: true };
+test('the ruins sit east of the hills and the lake; both ways in need Cloud Hop', () => {
+  const m = SPK.parseMap('ruins');
+  assert.equal(m.w, 54); assert.equal(m.h, 36); assert.equal(m.theme, 'ruins');
+  assert.equal(SPK.DOORS['hills:>:49,4'].at, 'ruins:>:0,6');
+  assert.equal(SPK.DOORS['lake:>:51,19'].at, 'ruins:>:0,28');
+  assert.deepEqual({ ...SPK.doorArrival('ruins:>:0,6') }, { map: 'ruins', tx: 1, ty: 6 });
+  assert.deepEqual({ ...SPK.doorArrival('ruins:>:0,28') }, { map: 'ruins', tx: 1, ty: 28 });
+  assert.deepEqual({ ...SPK.doorArrival('hills:>:49,4') }, { map: 'hills', tx: 48, ty: 4 });
+  assert.deepEqual({ ...SPK.doorArrival('lake:>:51,19') }, { map: 'lake', tx: 50, ty: 19 });
+  assert.ok(reach('lake', 1, 16, {})('lake:>:51,19'), 'the lake path east is on foot...');
+  assert.ok(!reach('ruins', 1, 28, { bubble: true })('ruins:F:23,17'), '...but the ledge it reaches needs a Cloud Hop');
+  assert.ok(reach('ruins', 1, 28, ALL)('ruins:F:23,17'));
+});
+
+test('ruins: the hollow sits in a moat (Bubble Hooves), the kitty past a gap (Cloud Hop)', () => {
+  const MOAT = ['ruins:D:45,6', 'ruins:C:42,10'], GAP = ['ruins:C:46,27', 'ruins:*:48,30', 'ruins:>:0,28'];
+  const all = reach('ruins', 1, 6, ALL), noHop = reach('ruins', 1, 6, { bubble: true }), dry = reach('ruins', 1, 6, { hop: true });
+  for (const id of keyThings('ruins')) {
+    assert.ok(all(id), `${id} reachable with every power`);
+    if (GAP.includes(id)) assert.ok(!noHop(id), `${id} needs Cloud Hop`);
+    else if (MOAT.includes(id)) assert.ok(!dry(id), `${id} needs Bubble Hooves`);
+    else assert.ok(noHop(id) && dry(id), `${id} reachable with either`);
+  }
+  assert.equal(SPK.DOORS['ruins:D:45,6'].at, 'hollow:U:1,13');
+});
+
+test("grumpcap's hollow: dark, a pool (bubble) and a ledge (hop), and the boss door past a campfire", () => {
+  const m = SPK.parseMap('hollow');
+  assert.equal(m.w, 42); assert.equal(m.h, 28); assert.ok(m.cave && m.dark === 'dark');
+  assert.equal(SPK.DOORS['hollow:D:37,13'].at, 'throne:U:13,16');
+  assert.deepEqual({ ...SPK.doorArrival('hollow:U:1,13') }, { map: 'hollow', tx: 2, ty: 13 });
+  assert.deepEqual({ ...SPK.doorArrival('hollow:D:37,13') }, { map: 'hollow', tx: 36, ty: 13 });
+  const POOL = ['hollow:H:9,23'], LEDGE = ['hollow:C:34,4', 'hollow:*:36,4'];
+  const all = reach('hollow', 2, 13, ALL), noHop = reach('hollow', 2, 13, { bubble: true }), dry = reach('hollow', 2, 13, { hop: true });
+  for (const id of keyThings('hollow')) {
+    assert.ok(all(id), `${id} reachable`);
+    if (LEDGE.includes(id)) assert.ok(!noHop(id), `${id} needs Cloud Hop`);
+    else if (POOL.includes(id)) assert.ok(!dry(id), `${id} needs Bubble Hooves`);
+    else assert.ok(noHop(id) && dry(id), `${id} reachable either way`);
+  }
+  const fire = SPK.entity('hollow:F:33,13'), door = SPK.entity('hollow:D:37,13');
+  assert.ok(Math.hypot(fire.tx - door.tx, fire.ty - door.ty) <= 5, 'you wake right outside the boss room');
+});
+
+test('the throne room is one open arena with one way out', () => {
+  const m = SPK.parseMap('throne');
+  assert.equal(m.w, 26); assert.equal(m.h, 18); assert.ok(m.cave && !m.dark);
+  assert.deepEqual({ ...SPK.doorArrival('throne:U:13,16') }, { map: 'throne', tx: 13, ty: 15 });
+  const seen = new Set(['13,15']); const q = [[13, 15]];
+  while (q.length) {
+    const [a, b] = q.pop();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const k = `${a + dx},${b + dy}`;
+      if (!seen.has(k) && !SPK.isSolid(m, a + dx, b + dy, null)) { seen.add(k); q.push([a + dx, b + dy]); }
+    }
+  }
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+    if (!SPK.isSolid(m, x, y, null)) assert.ok(seen.has(`${x},${y}`), `open tile ${x},${y} reachable`);
+  }
+});
+
+test('slice 4 treasures: chests, two friends, two heart pieces, campfires', () => {
+  const count = (id, k) => SPK.parseMap(id).entities.filter((e) => e.kind === k).length;
+  assert.equal(count('ruins', 'C'), 6); assert.equal(count('hollow', 'C'), 4);
+  assert.equal(count('ruins', 'F'), 1); assert.equal(count('hollow', 'F'), 1);
+  assert.equal(SPK.FRIENDS['ruins:*:48,30'].emoji, '🐱');
+  assert.equal(SPK.FRIENDS['hollow:*:36,4'].emoji, '🐼');
+  for (const id of ['ruins', 'hollow', 'throne']) assert.ok(SPK.MAP_ICON[id], `${id} has a map picture`);
+  assert.ok(count('ruins', 'r') >= 2 && count('hollow', 'r') >= 2, 'rock beetles live in the ruins and the hollow');
+});
+
+test('rock beetles: magic does half on Normal (full on Easy); the horn flips them for full damage', () => {
+  const b = SPK.ENEMIES.beetle;
+  assert.equal(b.hp, 4); assert.ok(b.armored);
+  const n = SPK.createGame('normal'), e = SPK.createGame('easy');
+  const beetle = { kind: 'beetle', hp: 4 };
+  assert.equal(SPK.hitDamage(n, beetle, 2, 'magic'), 1);
+  assert.equal(SPK.hitDamage(e, beetle, 2, 'magic'), 2);
+  assert.equal(SPK.hitDamage(n, beetle, 5, 'horn'), 5);
+  assert.equal(SPK.hitDamage(n, { kind: 'beetle', hp: 4, flipped: 1.5 }, 2, 'magic'), 2, 'a flipped beetle takes full magic');
+  assert.equal(SPK.hitDamage(n, { kind: 'slime', hp: 2 }, 2, 'magic'), 2, 'other enemies are not armored');
+});
+
+test('King Grumpcap: three phases by his hearts, a short shield after each hit, and his damage stays', () => {
+  const g = SPK.createGame('normal');
+  assert.equal(SPK.bossMax(g), 40);
+  assert.equal(SPK.bossHpNow(g), 40);
+  assert.equal(SPK.bossPhase(g), 1);
+  assert.equal(SPK.bossHit(g, 2, 1000), 'hit');
+  assert.equal(SPK.bossHpNow(g), 38);
+  assert.equal(SPK.bossHit(g, 2, 1100), 'immune', 'a short shield after a hit');
+  assert.equal(SPK.bossHit(g, 6, 1600), 'hit');
+  assert.equal(SPK.bossHpNow(g), 32);
+  g.bossHp = 26; assert.equal(SPK.bossPhase(g), 2, 'phase 2 at two thirds');
+  g.bossHp = 13; assert.equal(SPK.bossPhase(g), 3);
+  g.hp = 1; SPK.hurt(g, 2, 5000); SPK.wake(g);
+  assert.equal(SPK.bossHpNow(g), 13, 'getting sleepy never heals him');
+  g.bossHp = 4;
+  assert.equal(SPK.bossHit(g, 99, 9000), 'beaten');
+  assert.equal(g.bossBeaten, true);
+  assert.equal(SPK.bossHit(g, 1, 9999), null, 'once happy, he stays happy');
+  const easy = SPK.createGame('easy');
+  assert.equal(SPK.bossMax(easy), 30);
+  easy.bossHp = 7; assert.equal(SPK.bossPhase(easy), 2);
+  easy.bossHp = 6; assert.equal(SPK.bossPhase(easy), 3, 'phase 3 is shorter on Easy');
+});
+
+test("the boss's hearts and the crown survive a save", () => {
+  const g = SPK.createGame('normal'); g.mode = 'play';
+  g.bossHp = 17;
+  let back = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g)))));
+  assert.equal(SPK.bossHpNow(back), 17);
+  const s = JSON.parse(JSON.stringify(SPK.getSave(g))); s.bossHp = 'lots';
+  assert.equal(SPK.bossHpNow(SPK.applySave(SPK.validateSave(s))), 40, 'nonsense resets to full, never breaks the save');
+  delete s.bossHp;
+  assert.equal(SPK.bossHpNow(SPK.applySave(SPK.validateSave(s))), 40, 'older saves start him fresh');
+  g.bossHp = 0; g.bossBeaten = true;
+  assert.equal(SPK.takeCrown(g), true);
+  assert.equal(SPK.takeCrown(g), false, 'once');
+  assert.equal(g.closet.wearing.accessory, 'rainbowCrown', 'you put it on right away');
+  back = SPK.applySave(SPK.validateSave(JSON.parse(JSON.stringify(SPK.getSave(g)))));
+  assert.ok(back.bossBeaten && back.closet.owned.includes('rainbowCrown') && back.closet.wearing.accessory === 'rainbowCrown');
+  assert.equal(SPK.takeCrown(SPK.createGame('easy')), false, 'only after the boss');
+  const rich = SPK.createGame('easy'); rich.gems = 999;
+  assert.equal(SPK.closetTap(rich, 'rainbowCrown'), 'poor', 'the crown is never for sale');
+  assert.equal(rich.gems, 999);
+});
+
+test('nextGoal walks the slice 4 chain: ruins, the hollow campfire, the boss, then rests', () => {
+  const g = SPK.createGame('easy');
+  Object.assign(g.powers, { mighty: true, glow: true, bubble: true, hop: true });
+  g.broken.push('meadow:B:7,27', 'meadow:B:46,14', 'woods:B:30,5');
+  SPK.openChest(g, 'woods:C:26,24'); SPK.openChest(g, 'hills:C:31,3');
+  g.map = 'hills';
+  assert.equal(SPK.stage(g).key, 'ruins');
+  assert.equal(tileOf(SPK.nextGoal(g)), 'hills:49,4', 'east off the top plateau');
+  g.map = 'lake';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'lake:51,19', 'or east from the lake');
+  g.map = 'ruins';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'ruins:45,6', 'the hollow in the moat');
+  g.explored.hollow = new Uint8Array(42 * 28);
+  assert.equal(SPK.stage(g).key, 'hollow');
+  g.map = 'hollow';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'hollow:33,13', 'the campfire before the boss');
+  SPK.lightCampfire(g, 'hollow:F:33,13');
+  assert.equal(SPK.stage(g).key, 'boss');
+  assert.equal(tileOf(SPK.nextGoal(g)), 'hollow:37,13');
+  g.map = 'throne';
+  assert.equal(tileOf(SPK.nextGoal(g)), 'throne:13,2');
+  g.bossBeaten = true;
+  assert.equal(SPK.stage(g).key, 'done');
+  assert.equal(SPK.nextGoal(g), null);
+});
+
+test('the critters have a different hint for every new stage, and one lives in the ruins', () => {
+  const g = SPK.createGame('easy');
+  Object.assign(g.powers, { mighty: true, glow: true, bubble: true, hop: true });
+  g.broken.push('meadow:B:7,27', 'meadow:B:46,14', 'woods:B:30,5');
+  SPK.openChest(g, 'woods:C:26,24'); SPK.openChest(g, 'hills:C:31,3');
+  const texts = new Set();
+  const step = () => { const h = SPK.critterHint(g); assert.ok(h && h.picture.length >= 3 && h.text); texts.add(h.text); };
+  step(); g.explored.hollow = new Uint8Array(1); step(); SPK.lightCampfire(g, 'hollow:F:33,13'); step(); g.bossBeaten = true; step();
+  assert.equal(texts.size, 4);
+  assert.ok(SPK.CRITTERS.some((c) => c.map === 'ruins'), 'a critter in the ruins');
+});
+
+test('a giant hit (Mega Horn) takes at most 6 of King Grumpcap\'s hearts, so the fight never ends in one bonk', () => {
+  const g = SPK.createGame('normal');
+  assert.equal(SPK.bossHit(g, 99, 0), 'hit');
+  assert.equal(SPK.bossHpNow(g), 34);
 });

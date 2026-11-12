@@ -818,6 +818,67 @@ async function sparklehornPass(browser, vp) {
   check(w.mode === 'play' && w.inputs.active === 0, `sparkle: ✖ closes the closet with nothing held (${w.mode}, ${w.inputs.active})`);
   await quiet();
 
+  // Slice 4: the d-pad walks you (hold → for 0.7s), and letting go stops
+  await page.waitForTimeout(300);
+  const dp = await page.evaluate(() => window.__spk.layout().dpad);
+  const dx0 = await page.evaluate(() => window.__spk.state.x);
+  const ptr = (type, x, y) => page.evaluate(([type, x, y]) => {
+    document.getElementById('c').dispatchEvent(new PointerEvent(type, { pointerId: 77, clientX: x, clientY: y, pointerType: 'mouse', bubbles: true, cancelable: true }));
+  }, [type, x, y]);
+  await ptr('pointerdown', dp.x + dp.r * 0.7, dp.y);
+  await page.waitForTimeout(700);
+  const held = await spk();
+  await ptr('pointerup', dp.x + dp.r * 0.7, dp.y);
+  await page.waitForTimeout(200);
+  const dx1 = await page.evaluate(() => window.__spk.state.x);
+  check(dx1 - dx0 > 32 && held.inputs.move.x === 1, `sparkle: holding → on the d-pad walks right (${Math.round(dx1 - dx0)}px)`);
+  check((await spk()).inputs.active === 0, 'sparkle: letting go of the d-pad lets go');
+  await t.shot('29-sparkle-dpad');
+
+  // Over the windmill plateau, east into the Moonlight Ruins
+  await page.evaluate(() => { const s = window.__spk; s._give('hop'); s._clearEnemies(); s._teleport('hills', 46, 4); });
+  await page.waitForTimeout(400);
+  if (vp.mobile) { const ex = await toScreen(49, 4); await tap(ex.x, ex.y); } else await page.keyboard.down('ArrowRight');
+  await page.waitForFunction(() => window.__spk.state.map === 'ruins', null, { timeout: 5000 }).catch(() => {});
+  if (!vp.mobile) await page.keyboard.up('ArrowRight');
+  await page.waitForTimeout(500);
+  w = await spk();
+  check(w.map === 'ruins' && w.mode === 'play', `sparkle: the top of Windy Hills leads east to the Moonlight Ruins (${w.map})`);
+  await page.evaluate(() => { window.__spk._clearEnemies(); window.__spk._teleport('ruins', 27, 13); });
+  await page.waitForTimeout(500);
+  await t.shot('30-sparkle-ruins');
+  const h0 = await spk();
+  await page.evaluate(() => { const s = window.__spk; s._give('glow'); s._teleport('hollow', 20, 13); });
+  await page.waitForTimeout(800);
+  const h1 = await spk();
+  check(h1.map === 'hollow' && h1.frames > h0.frames + 3 && h1.errors === h0.errors, `sparkle: Grumpcap's Hollow draws with no errors (${h1.frames - h0.frames} frames)`);
+
+  // King Grumpcap: sparkle him happy, take the Rainbow Crown, celebrate, go home
+  await page.evaluate(() => { const s = window.__spk; s._clearEnemies(); s._teleport('throne', 13, 13); s.state.bossHp = 2; });
+  await page.waitForTimeout(600);
+  check((await page.evaluate(() => window.__spk.boss)) && !(await page.evaluate(() => window.__spk.boss.happy)), 'sparkle: King Grumpcap waits in his room');
+  for (let i = 0; i < 30 && !(await page.evaluate(() => window.__spk.state.bossBeaten)); i++) {
+    await page.evaluate(() => { const s = window.__spk.state, b = window.__spk.boss; s.hp = s.hpMax; if (b) s.facing = Math.atan2(b.y - s.y, b.x - s.x); });
+    const mg = (await page.evaluate(() => window.__spk.layout())).magic;
+    await tap(mg.x, mg.y); await page.waitForTimeout(250);
+  }
+  const happy = await page.evaluate(() => ({ beaten: window.__spk.state.bossBeaten, boss: window.__spk.boss, crown: window.__spk.crown }));
+  check(happy.beaten && happy.boss && happy.boss.happy && happy.crown, `sparkle: ✨ turns King Grumpcap happy and he drops the Rainbow Crown (${JSON.stringify(happy)})`);
+  if (happy.crown) await page.evaluate(([x, y]) => { window.__spk.state.x = x; window.__spk.state.y = y; }, [happy.crown.x, happy.crown.y]);
+  await page.waitForFunction(() => window.__spk.state.mode === 'celebrate', null, { timeout: 4000 }).catch(() => {});
+  w = await spk();
+  check(w.mode === 'celebrate', `sparkle: taking the crown starts the celebration (${w.mode})`);
+  await page.waitForTimeout(2800);
+  await t.shot('31-sparkle-celebrate');
+  await tap(vp.width / 2, vp.height / 2);
+  await page.waitForFunction(() => window.__spk.state.map === 'meadow' && window.__spk.state.mode === 'play', null, { timeout: 5000 }).catch(() => {});
+  w = await spk();
+  const crowned = await page.evaluate(() => window.__spk.state.closet.wearing.accessory);
+  check(w.map === 'meadow' && w.mode === 'play' && crowned === 'rainbowCrown', `sparkle: after the party you're home, wearing the crown (${w.map}, ${w.mode}, ${crowned})`);
+  await page.waitForTimeout(400);
+  await t.shot('32-sparkle-rainbow-home');
+  await quiet();
+
   // 7. Rotation mid-play (phones and iPads)
   if (vp.mobile) {
     await page.setViewportSize({ width: vp.height, height: vp.width });
