@@ -1475,3 +1475,18 @@ test('a giant hit (Mega Horn) takes at most 6 of King Grumpcap\'s hearts, so the
   assert.equal(SPK.bossHit(g, 99, 0), 'hit');
   assert.equal(SPK.bossHpNow(g), 34);
 });
+
+// ── Slice 4 review fixes ────────────────────────────────────────────────
+test('walking into the boss room lights the Hollow campfire as your wake-up spot (without a free heal)', () => {
+  const g = SPK.createGame('normal'); g.hp = 3;
+  SPK.reachBossRoom(g);
+  assert.ok(g.campfires.includes('hollow:F:33,13'));
+  assert.equal(g.wakeCampfire, 'hollow:F:33,13');
+  assert.equal(g.hp, 3);
+});
+
+test('once King Grumpcap is happy, the hint says you did it, even if you skipped earlier steps', () => {
+  const g = SPK.createGame('easy');
+  g.bossBeaten = true;
+  assert.equal(SPK.stage(g).key, 'done');
+});

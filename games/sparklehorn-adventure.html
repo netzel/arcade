@@ -688,6 +688,12 @@
     state.mode = 'play';
   };
 
+  // You can slip past the Hollow campfire, so reaching the boss room counts as
+  // lighting it: getting sleepy in the fight wakes you right outside.
+  SPK.reachBossRoom = function (state) {
+    if (state.campfires.indexOf(SPK.HOLLOW_FIRE) < 0) state.campfires.push(SPK.HOLLOW_FIRE);
+    state.wakeCampfire = SPK.HOLLOW_FIRE;
+  };
   SPK.lightCampfire = function (state, id) {
     var fresh = state.campfires.indexOf(id) < 0;
     if (fresh) state.campfires.push(id);
@@ -920,6 +926,7 @@
   // The adventure's big steps, in order: what to do next, and where.
   SPK.stage = function (state) {
     var broke = function (id) { return state.broken.indexOf(id) >= 0; };
+    if (state.bossBeaten) return { key: 'done', at: null }; // the big ending wins over any skipped step
     if (!state.powers.mighty) return { key: 'mighty', at: 'pebble:P:27,11' };
     // The secret chest is optional: once the way east is open, don't drag you back to it.
     if (!broke(SPK.BOULDER) && !broke(SPK.EAST_BOULDER)) return { key: 'secret', at: SPK.BOULDER };
@@ -1624,6 +1631,7 @@
   function bossSpawn() {
     boss = null; waves = []; crownPick = null;
     if (!map || map.id !== 'throne') return;
+    SPK.reachBossRoom(state);
     if (state.bossBeaten) {
       boss = { happy: true, x: BOSS_HOME.x, y: BOSS_HOME.y, t: 0, z: 0 };
       if (state.closet.owned.indexOf('rainbowCrown') < 0) crownPick = { x: BOSS_HOME.x, y: BOSS_HOME.y + TILE * 1.7 };
@@ -1694,6 +1702,7 @@
   function bossHappy(e) {
     e.hp = 0;
     enemies.forEach(function (o) { if (o !== e && o.hp > 0) { o.hp = 0; popEnemy(o); } });
+    enemies = enemies.filter(function (o) { return o.hp > 0; }); // no grumpy face over the happy one
     spores = []; waves = [];
     boss = { happy: true, x: e.x, y: e.y, t: 0, z: 0 };
     crownPick = { x: e.x, y: Math.min(e.y + TILE * 1.7, (map.h - 3.5) * TILE) };
