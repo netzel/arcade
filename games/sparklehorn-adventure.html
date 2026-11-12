@@ -3349,6 +3349,7 @@
     _give: function (kind) { if (SPK.POWERUPS[kind]) SPK.grantPowerup(state, kind, now()); else state.powers[kind] = true; },
     get enemies() { return enemies.length; },
     get boss() { return boss ? { happy: !!boss.happy, hp: boss.hp, act: boss.act || null, phase: boss.phase || null, x: boss.x, y: boss.y } : null; },
+    get celebT() { return celebT; },
     get crown() { return crownPick ? { x: crownPick.x, y: crownPick.y } : null; },
     get hint() { return trailOn(); },
   };

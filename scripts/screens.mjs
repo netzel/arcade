@@ -868,7 +868,8 @@ async function sparklehornPass(browser, vp) {
   await page.waitForFunction(() => window.__spk.state.mode === 'celebrate', null, { timeout: 4000 }).catch(() => {});
   w = await spk();
   check(w.mode === 'celebrate', `sparkle: taking the crown starts the celebration (${w.mode})`);
-  await page.waitForTimeout(2800);
+  // wait for the 👆 in game time (desktop WebKit renders at ~10 fps, so game time runs slow)
+  await page.waitForFunction(() => window.__spk.celebT > 2.6, null, { timeout: 15000 }).catch(() => {});
   await t.shot('31-sparkle-celebrate');
   await tap(vp.width / 2, vp.height / 2);
   await page.waitForFunction(() => window.__spk.state.map === 'meadow' && window.__spk.state.mode === 'play', null, { timeout: 5000 }).catch(() => {});
